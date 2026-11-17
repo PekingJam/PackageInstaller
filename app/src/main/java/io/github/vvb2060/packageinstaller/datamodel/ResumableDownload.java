@@ -34,7 +34,55 @@ public final class ResumableDownload {
         boolean isCancelled();
     }
 
+    /** 未完成的下载。 */
+    public static final class Pending {
+        public final String url;
+        public final String label;
+        public final long downloaded;
+        public final long modified;
+
+        Pending(String url, String label, long downloaded, long modified) {
+            this.url = url;
+            this.label = label;
+            this.downloaded = downloaded;
+            this.modified = modified;
+        }
+    }
+
     private ResumableDownload() {
+    }
+
+    /** 扫描 cacheDir/downloads 里还没下完的条目。 */
+    public static java.util.List<Pending> pending(Context context) {
+        var list = new java.util.ArrayList<Pending>();
+        var dir = new File(context.getCacheDir(), "downloads");
+        var files = dir.listFiles();
+        if (files == null) return list;
+        for (var meta : files) {
+            var name = meta.getName();
+            if (!name.endsWith(".meta")) continue;
+            var key = name.substring(0, name.length() - ".meta".length());
+            var part = new File(dir, key + ".part");
+            if (!part.exists() || part.length() == 0) continue;
+            var url = readMeta(meta);
+            if (url.isEmpty()) continue;
+            // 10 秒内还在写的条目说明正在下载，别在「未完成」里重复启动
+            if (System.currentTimeMillis() - part.lastModified() < 10_000L) continue;
+            var label = android.net.Uri.parse(url).getLastPathSegment();
+            if (label == null || label.isEmpty()) label = url;
+            list.add(new Pending(url, label, part.length(), part.lastModified()));
+        }
+        list.sort((a, b) -> Long.compare(b.modified, a.modified));
+        return list;
+    }
+
+    /** 删除某个 URL 的残留数据。 */
+    public static void delete(Context context, String url) {
+        var dir = new File(context.getCacheDir(), "downloads");
+        var key = key(url);
+        deleteQuietly(new File(dir, key + ".part"));
+        deleteQuietly(new File(dir, key + ".meta"));
+        deleteQuietly(new File(dir, key + ".apk"));
     }
 
     public static File download(Context context, String url, Listener listener,

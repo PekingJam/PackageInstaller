@@ -171,4 +171,18 @@
     <string name="default_installer_desc">让 APK 文件默认用它打开</string>
     <string name="default_chooser_title">选择「极简安装器」并点「始终」</string>
     <string name="default_done">已设为默认安装器</string>
+
+    <string name="notify_downloading">正在下载</string>
+    <string name="notify_download_starting">准备下载…</string>
+    <string name="notify_cancel">取消</string>
+    <string name="notify_cancelled">已取消，已下载的部分已保留</string>
+    <string name="notify_resume">继续下载</string>
+    <string name="resume_title">未完成的下载</string>
+    <string name="resume_hint">已下载的部分会保留，继续时从断点接着下</string>
+    <string name="resume_action">继续</string>
+    <string name="resume_delete">删除</string>
+    <string name="resume_downloaded">已下载 %1$s</string>
+    <string name="resume_card_title">未完成的下载（%1$d）</string>
+    <string name="resume_card_desc">点击继续下载或删除残留</string>
+    <string name="resume_started">正在继续下载…</string>
 </resources>

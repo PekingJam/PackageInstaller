@@ -26,11 +26,13 @@ import io.github.vvb2060.packageinstaller.core.InstallRunner;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.datamodel.DataSource;
 import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
+import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
+import io.github.vvb2060.packageinstaller.ui.Format;
 import io.github.vvb2060.packageinstaller.ui.InstallResultActivity;
 
 /**
- * 后台安装：确认之后把写包/提交丢到这里跑，通知栏显示进度与结果。
- * 界面可以关掉，装完在通知里直接打开应用。
+ * 后台「下载 + 安装」：确认之后把 URL 或本地来源交给这里，通知栏显示进度与结果。
+ * 网络来源用可续传下载，装完删除临时文件；失败保留 .part，通知里可以直接继续。
  */
 public class InstallService extends Service {
     private static final String TAG = InstallService.class.getSimpleName();
@@ -43,28 +45,48 @@ public class InstallService extends Service {
     public static final String EXTRA_TEMP = "temp";
 
     public static final String ACTION_DISMISS = "io.github.vvb2060.packageinstaller.DISMISS";
+    public static final String ACTION_CANCEL = "io.github.vvb2060.packageinstaller.CANCEL";
     public static final String EXTRA_NOTIFICATION_ID = "notification_id";
 
     private static final String CHANNEL_ID = "install_status";
     private static final int PROGRESS_ID = 0x5101;
     private static final int RESULT_ID = 0x5102;
 
+    private static volatile boolean cancelRequested;
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public static void start(Context context, String path, String uri, String label,
                              boolean setInstaller, boolean full, boolean temp) {
-        var intent = new Intent(context, InstallService.class)
+        start(context, new Intent(context, InstallService.class)
             .putExtra(EXTRA_PATH, path)
             .putExtra(EXTRA_URI, uri)
             .putExtra(EXTRA_LABEL, label)
             .putExtra(EXTRA_SET_INSTALLER, setInstaller)
             .putExtra(EXTRA_FULL, full)
-            .putExtra(EXTRA_TEMP, temp);
+            .putExtra(EXTRA_TEMP, temp));
+    }
+
+    /** 从「未完成的下载」继续：只需要 URL，装完自然会问要不要装。 */
+    public static void resume(Context context, String url, String label) {
+        start(context, new Intent(context, InstallService.class)
+            .putExtra(EXTRA_URI, url)
+            .putExtra(EXTRA_LABEL, label)
+            .putExtra(EXTRA_SET_INSTALLER, true)
+            .putExtra(EXTRA_FULL, true)
+            .putExtra(EXTRA_TEMP, true));
+    }
+
+    private static void start(Context context, Intent intent) {
         try {
             ContextCompat.startForegroundService(context, intent);
         } catch (RuntimeException e) {
             Log.e(TAG, "start failed", e);
         }
+    }
+
+    public static void requestCancel() {
+        cancelRequested = true;
     }
 
     @Override
@@ -90,7 +112,9 @@ public class InstallService extends Service {
             stopSelf(startId);
             return START_NOT_STICKY;
         }
-        startForeground(PROGRESS_ID, progressNotification(getString(R.string.notify_preparing), -1));
+        cancelRequested = false;
+        startForeground(PROGRESS_ID, progressNotification(
+            getString(R.string.notify_preparing), null, -1, true));
         executor.execute(() -> install(intent, startId));
         return START_NOT_STICKY;
     }
@@ -106,9 +130,27 @@ public class InstallService extends Service {
         var uri = intent.getStringExtra(EXTRA_URI);
         var label = intent.getStringExtra(EXTRA_LABEL);
         var temporary = intent.getBooleanExtra(EXTRA_TEMP, false);
+        var network = path == null && uri != null
+            && (uri.startsWith("http://") || uri.startsWith("https://"));
         Closeable source = null;
         try {
             Privilege.attach(getApplicationContext());
+
+            if (network) {
+                updateProgress(getString(R.string.notify_downloading), label, 0,
+                    getString(R.string.notify_download_starting));
+                var file = ResumableDownload.download(this, uri,
+                    (downloaded, total, speed) -> updateProgress(
+                        getString(R.string.notify_downloading), label,
+                        total > 0 ? (int) (downloaded * 100 / total) : -1,
+                        Format.size(downloaded)
+                            + (total > 0 ? " / " + Format.size(total) : "")
+                            + " · " + Format.speed(speed)),
+                    () -> cancelRequested);
+                path = file.getAbsolutePath();
+                temporary = true;
+            }
+
             DataSource dataSource;
             if (path != null) {
                 var pfd = ParcelFileDescriptor.open(new File(path),
@@ -127,33 +169,48 @@ public class InstallService extends Service {
             var parser = new ZipParser(dataSource);
             var apk = parser.parse();
             var name = apk.getLabel();
-            updateProgress(name, -1);
+            updateProgress(getString(R.string.notify_installing), name, -1, null);
+
+            var full = intent.getBooleanExtra(EXTRA_FULL, true);
+            if (!apk.isSplit()) full = true;
+
+            final var finalPath = path;
+            final var finalTemporary = temporary;
+            final var finalNetwork = network;
+            final var finalUri = uri;
 
             InstallRunner.run(this, apk, parser,
-                intent.getBooleanExtra(EXTRA_SET_INSTALLER, true),
-                intent.getBooleanExtra(EXTRA_FULL, true),
+                intent.getBooleanExtra(EXTRA_SET_INSTALLER, true), full,
                 new InstallRunner.Callback() {
                     @Override
                     public void onProgress(int percent) {
-                        updateProgress(name, percent);
+                        updateProgress(getString(R.string.notify_installing), name,
+                            percent > 100 ? -1 : percent, null);
                     }
 
                     @Override
                     public void onSuccess() {
-                        if (temporary && path != null) deleteQuietly(path);
+                        if (finalTemporary && finalPath != null) deleteQuietly(finalPath);
                         notifySuccess(name, apk.packageName);
                         finish(startId);
                     }
 
                     @Override
                     public void onFailure(String reason) {
-                        notifyFailure(name, reason);
+                        notifyFailure(name, reason, finalNetwork ? finalUri : null,
+                            finalTemporary ? finalPath : null);
                         finish(startId);
                     }
                 });
         } catch (Throwable e) {
             Log.e(TAG, "install failed", e);
-            notifyFailure(label == null ? getString(R.string.app_name) : label, e.toString());
+            if (cancelRequested) {
+                notifyFailure(label == null ? getString(R.string.app_name) : label,
+                    getString(R.string.notify_cancelled), network ? uri : null, null);
+            } else {
+                notifyFailure(label == null ? getString(R.string.app_name) : label, e.toString(),
+                    network ? uri : null, temporary ? path : null);
+            }
             finish(startId);
         } finally {
             if (source != null) {
@@ -165,23 +222,43 @@ public class InstallService extends Service {
         }
     }
 
-    private void updateProgress(String label, int percent) {
+    private void updateProgress(String title, String label, int percent, String detail) {
         var manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager != null) {
-            manager.notify(PROGRESS_ID, progressNotification(label, percent));
+            manager.notify(PROGRESS_ID, progressNotification(title, label, percent, false, detail));
         }
     }
 
-    private Notification progressNotification(String label, int percent) {
+    private Notification progressNotification(String title, String label, int percent,
+                                              boolean cancel) {
+        return progressNotification(title, label, percent, cancel, null);
+    }
+
+    private Notification progressNotification(String title, String label, int percent,
+                                              boolean cancel, String detail) {
         var indeterminate = percent < 0 || percent > 100;
-        return new Notification.Builder(this, CHANNEL_ID)
+        var text = new StringBuilder();
+        if (label != null) text.append(label);
+        if (detail != null && !detail.isEmpty()) {
+            if (text.length() > 0) text.append('\n');
+            text.append(detail);
+        }
+        var builder = new Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(getString(R.string.notify_installing))
-            .setContentText(label)
+            .setContentTitle(title)
+            .setContentText(text.toString())
             .setOnlyAlertOnce(true)
             .setOngoing(true)
-            .setProgress(100, indeterminate ? 0 : percent, indeterminate)
-            .build();
+            .setProgress(100, indeterminate ? 0 : percent, indeterminate);
+        if (cancel) {
+            var cancelIntent = new Intent(this, NotificationActionReceiver.class)
+                .setAction(ACTION_CANCEL);
+            builder.addAction(new Notification.Action.Builder(
+                R.drawable.ic_remove_circle, getString(R.string.notify_cancel),
+                PendingIntent.getBroadcast(this, 3, cancelIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)).build());
+        }
+        return builder.build();
     }
 
     private void notifySuccess(String label, String packageName) {
@@ -210,7 +287,7 @@ public class InstallService extends Service {
         manager.notify(RESULT_ID, builder.build());
     }
 
-    private void notifyFailure(String label, String reason) {
+    private void notifyFailure(String label, String reason, String resumeUrl, String tempPath) {
         var manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager == null) return;
         manager.cancel(PROGRESS_ID);
@@ -230,9 +307,24 @@ public class InstallService extends Service {
                 label + "\n" + getString(R.string.notify_failed_open_hint)))
             .setContentIntent(contentIntent)
             .setAutoCancel(true);
+
+        if (resumeUrl != null) {
+            var resume = new Intent(this, InstallService.class)
+                .putExtra(EXTRA_URI, resumeUrl)
+                .putExtra(EXTRA_LABEL, label)
+                .putExtra(EXTRA_SET_INSTALLER, true)
+                .putExtra(EXTRA_FULL, true)
+                .putExtra(EXTRA_TEMP, true);
+            var resumeIntent = PendingIntent.getForegroundService(this, 4, resume,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            builder.addAction(new Notification.Action.Builder(
+                R.drawable.ic_refresh, getString(R.string.notify_resume), resumeIntent).build());
+        } else if (tempPath != null) {
+            deleteQuietly(tempPath);
+        }
+
         builder.addAction(new Notification.Action.Builder(
-            R.drawable.ic_alert, getString(R.string.notify_failed_open),
-            contentIntent).build());
+            R.drawable.ic_alert, getString(R.string.notify_failed_open), contentIntent).build());
         builder.addAction(new Notification.Action.Builder(
             R.drawable.ic_remove_circle, getString(R.string.notify_close), dismissIntent(RESULT_ID))
             .build());

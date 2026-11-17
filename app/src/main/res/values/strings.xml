@@ -171,4 +171,18 @@
     <string name="default_installer_desc">Open APK files with this app by default</string>
     <string name="default_chooser_title">Pick this app, then choose Always</string>
     <string name="default_done">Default installer set</string>
+
+    <string name="notify_downloading">Downloading</string>
+    <string name="notify_download_starting">Starting…</string>
+    <string name="notify_cancel">Cancel</string>
+    <string name="notify_cancelled">Cancelled, downloaded data kept</string>
+    <string name="notify_resume">Resume</string>
+    <string name="resume_title">Unfinished downloads</string>
+    <string name="resume_hint">Downloaded data is kept; resuming continues from the break point</string>
+    <string name="resume_action">Resume</string>
+    <string name="resume_delete">Delete</string>
+    <string name="resume_downloaded">Downloaded %1$s</string>
+    <string name="resume_card_title">Unfinished downloads (%1$d)</string>
+    <string name="resume_card_desc">Resume or delete leftover data</string>
+    <string name="resume_started">Resuming download…</string>
 </resources>

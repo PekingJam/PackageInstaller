@@ -21,12 +21,15 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 
+import javax.net.ssl.SSLContext;
+
 import io.github.vvb2060.packageinstaller.apk.ApkLite;
 import io.github.vvb2060.packageinstaller.apk.ZipParser;
 import io.github.vvb2060.packageinstaller.apksig.Block;
 import io.github.vvb2060.packageinstaller.apksig.Parser;
 import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
-import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
+import io.github.vvb2060.packageinstaller.datamodel.DownloadEngine;
+import io.github.vvb2060.packageinstaller.datamodel.NetDataSource;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
@@ -120,28 +123,27 @@ public class InstallRepository implements Closeable {
         installResult.postValue(new SettingsUserAction(safeMode));
     }
 
+    /**
+     * 网络安装只做「预览」：用带 Range 的随机读取拿到中央目录 / AndroidManifest /
+     * 签名块（几百 KB），不把整个包拉下来。确认之后由 InstallService 负责续传下载 + 安装。
+     */
     private InstallStage processUrl(String url) {
         Log.v(TAG, "URL: " + url);
         ApkLite parsedApk;
         try {
-            var file = ResumableDownload.download(context, url, (downloaded, total, speed) -> {
-                if (downloadProgress != null) {
-                    downloadProgress.postValue(new DownloadProgress(downloaded, total, speed));
-                }
-            }, () -> cancelled);
-            downloadedPath = file.getAbsolutePath();
-            var pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
-            closeable = pfd;
-            var dataSource = FileDataSource.asDataSource(pfd);
+            var engine = new DownloadEngine(SSLContext.getDefault());
+            closeable = engine;
+            var dataSource = NetDataSource.open(engine, new URI(url));
             zipParser = new ZipParser(dataSource);
             parsedApk = zipParser.parse();
+            dataSource.stopPersistentCache();
         } catch (Exception | LinkageError e) {
             if (cancelled) return new InstallAborted(InstallAborted.ABORT_CLOSE);
-            Log.e(TAG, "Failed to download/parse: " + url, e);
+            Log.e(TAG, "Failed to preview: " + url, e);
             return new InstallAborted(InstallAborted.ABORT_PARSE, e.toString());
         }
 
-        var stage = processApkLite(parsedApk, downloadedPath, null);
+        var stage = processApkLite(parsedApk, null, url);
         if (parsedApk.label == null) {
             var name = Uri.parse(url).getLastPathSegment();
             if (name != null) parsedApk.label = name;

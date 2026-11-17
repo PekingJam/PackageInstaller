@@ -17,8 +17,8 @@ android {
     namespace = "io.github.vvb2060.packageinstaller"
     defaultConfig {
         applicationId = "com.hyperosmod.packageinstaller"
-        versionCode = 20
-        versionName = "2.2.1"
+        versionCode = 21
+        versionName = "2.2.2"
     }
     signingConfigs {
         create("release") {
