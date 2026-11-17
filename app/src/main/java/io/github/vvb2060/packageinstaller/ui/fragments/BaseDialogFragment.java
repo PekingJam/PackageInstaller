@@ -68,7 +68,8 @@ public abstract sealed class BaseDialogFragment extends DialogFragment permits
     @Override
     public void onCancel(@NonNull DialogInterface dialog) {
         super.onCancel(dialog);
-        finish();
+        // 从主界面打开的弹窗按返回只应关自己，不能把首页也关掉
+        finishOrDismiss();
     }
 
     protected void finish() {

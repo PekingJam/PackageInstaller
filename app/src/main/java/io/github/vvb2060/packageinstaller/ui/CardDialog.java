@@ -46,8 +46,10 @@ public final class CardDialog {
         var window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT);
+            // 大屏/横屏下不要铺满整屏
+            var metrics = context.getResources().getDisplayMetrics();
+            var width = Math.min(metrics.widthPixels - dp(36, context), dp(560, context));
+            window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT);
         }
         return new CardDialog(dialog);
     }
@@ -124,7 +126,7 @@ public final class CardDialog {
         button.setText(text);
         var params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMarginStart(dp(8));
+        params.setMarginStart(dp(8, dialog.getContext()));
         buttons.addView(button, params);
         if (listener != null) button.setOnClickListener(listener);
         return button;
@@ -133,6 +135,33 @@ public final class CardDialog {
     public void show() {
         dialog.show();
         constrainHeight();
+        fixButtonLayout();
+    }
+
+    /** 三个按钮在窄屏放不下时改成整行竖排，避免主按钮被裁掉。 */
+    private void fixButtonLayout() {
+        buttons.post(() -> {
+            var available = buttons.getWidth();
+            var count = buttons.getChildCount();
+            if (available <= 0 || count < 2) return;
+            var needed = 0;
+            for (int i = 0; i < count; i++) {
+                var child = buttons.getChildAt(i);
+                needed += child.getMeasuredWidth();
+                var params = (LinearLayout.LayoutParams) child.getLayoutParams();
+                needed += params.getMarginStart() + params.getMarginEnd();
+            }
+            if (needed <= available) return;
+            buttons.setOrientation(LinearLayout.VERTICAL);
+            for (int i = 0; i < count; i++) {
+                var child = buttons.getChildAt(i);
+                var params = (LinearLayout.LayoutParams) child.getLayoutParams();
+                params.width = LinearLayout.LayoutParams.MATCH_PARENT;
+                params.setMarginStart(0);
+                params.topMargin = i == 0 ? 0 : dp(8, dialog.getContext());
+                child.setLayoutParams(params);
+            }
+        });
     }
 
     public void dismiss() {
@@ -154,8 +183,7 @@ public final class CardDialog {
         });
     }
 
-    private static int dp(int value) {
-        return (int) (value * android.content.res.Resources.getSystem()
-            .getDisplayMetrics().density);
+    private static int dp(int value, Context context) {
+        return (int) (value * context.getResources().getDisplayMetrics().density);
     }
 }

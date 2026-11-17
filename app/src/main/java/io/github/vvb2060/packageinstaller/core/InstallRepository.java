@@ -205,7 +205,7 @@ public class InstallRepository implements Closeable {
         } catch (RootInstaller.InstallException e) {
             installResult.postValue(new InstallFailed(apkLite, PackageInstaller.STATUS_FAILURE,
                 e.reason + "\n" + e.getMessage()));
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             Log.e(TAG, "Root install failed", e);
             installResult.postValue(new InstallFailed(apkLite, PackageInstaller.STATUS_FAILURE,
                 e.toString()));

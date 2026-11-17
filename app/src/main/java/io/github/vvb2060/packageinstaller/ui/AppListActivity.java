@@ -25,6 +25,9 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import java.text.Collator;
@@ -53,6 +56,7 @@ public class AppListActivity extends FragmentActivity {
     private TextView empty;
     private TextView countText;
     private TextView[] filters;
+    private CardDialog currentDialog;
     private int filter = FILTER_ALL;
     private String query = "";
 
@@ -83,6 +87,7 @@ public class AppListActivity extends FragmentActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_app_list);
+        setupInsets();
         Privilege.attach(getApplicationContext());
 
         progress = findViewById(R.id.progress);
@@ -122,16 +127,39 @@ public class AppListActivity extends FragmentActivity {
         adapter = new AppAdapter();
         var list = (ListView) findViewById(R.id.app_list);
         list.setAdapter(adapter);
-        list.setOnItemClickListener((parent, view, position, id) ->
-            showAppDialog(shown.get(position)));
 
         load();
+    }
+
+    private void setupInsets() {
+        var root = findViewById(R.id.root);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        var baseLeft = root.getPaddingLeft();
+        var baseTop = root.getPaddingTop();
+        var baseRight = root.getPaddingRight();
+        var baseBottom = root.getPaddingBottom();
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            var bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                | WindowInsetsCompat.Type.displayCutout());
+            view.setPadding(baseLeft + bars.left, baseTop + bars.top,
+                baseRight + bars.right, baseBottom + bars.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (currentDialog != null) currentDialog.dismiss();
+        main.removeCallbacksAndMessages(null);
+        executor.shutdownNow();
+        super.onDestroy();
     }
 
     private void updateFilterStyle() {
         for (int i = 0; i < filters.length; i++) {
             var selected = i == filter;
-            filters[i].setBackgroundResource(selected ? R.drawable.bg_chip : R.drawable.bg_chip_outline);
+            filters[i].setBackgroundResource(selected
+                ? R.drawable.bg_chip : R.drawable.bg_chip_outline);
             filters[i].setTextColor(getColor(selected
                 ? R.color.ui_on_primary_container
                 : R.color.ui_on_surface_variant));
@@ -139,6 +167,7 @@ public class AppListActivity extends FragmentActivity {
     }
 
     private void load() {
+        if (isDestroyed()) return;
         progress.setVisibility(View.VISIBLE);
         empty.setVisibility(View.GONE);
         executor.execute(() -> {
@@ -155,7 +184,13 @@ public class AppListActivity extends FragmentActivity {
                 if (app == null) continue;
                 var label = app.loadLabel(pm);
                 var text = label == null ? info.packageName : label.toString();
-                list.add(new AppEntry(info, text, app.loadIcon(pm)));
+                Drawable drawable;
+                try {
+                    drawable = app.loadIcon(pm);
+                } catch (RuntimeException e) {
+                    drawable = null;
+                }
+                list.add(new AppEntry(info, text, drawable));
             }
             var collator = Collator.getInstance(Locale.CHINA);
             list.sort((a, b) -> {
@@ -163,6 +198,7 @@ public class AppListActivity extends FragmentActivity {
                 return collator.compare(a.label, b.label);
             });
             main.post(() -> {
+                if (isDestroyed()) return;
                 all.clear();
                 all.addAll(list);
                 progress.setVisibility(View.GONE);
@@ -190,15 +226,19 @@ public class AppListActivity extends FragmentActivity {
 
     private void showAppDialog(AppEntry entry) {
         var dialog = CardDialog.create(this);
+        currentDialog = dialog;
+
         var subtitle = new StringBuilder(entry.packageName);
         if (!entry.version.isEmpty()) subtitle.append(" · v").append(entry.version);
         if (entry.system) subtitle.append(" · ").append(getString(R.string.app_system_tag));
         if (!entry.enabled) subtitle.append(" · ").append(getString(R.string.app_state_disabled));
-        if (!entry.installed) subtitle.append(" · ").append(getString(R.string.app_state_uninstalled));
+        if (!entry.installed) {
+            subtitle.append(" · ").append(getString(R.string.app_state_uninstalled));
+        }
 
         dialog.icon(entry.icon)
             .title(entry.label)
-            .status(subtitle);
+            .status(subtitle.toString());
 
         var content = dialog.contentView();
         var intent = getPackageManager().getLaunchIntentForPackage(entry.packageName);
@@ -296,6 +336,7 @@ public class AppListActivity extends FragmentActivity {
 
     private void confirm(int title, int message, int positive, Runnable onConfirm) {
         var dialog = CardDialog.create(this);
+        currentDialog = dialog;
         dialog.icon(R.drawable.ic_alert)
             .title(getString(title))
             .message(getString(message));
@@ -323,6 +364,7 @@ public class AppListActivity extends FragmentActivity {
             }
             final var result = error;
             main.post(() -> {
+                if (isDestroyed()) return;
                 if (result == null) {
                     Toast.makeText(this, getString(successLabel), Toast.LENGTH_SHORT).show();
                 } else {
@@ -355,7 +397,8 @@ public class AppListActivity extends FragmentActivity {
             var view = convertView != null ? convertView
                 : getLayoutInflater().inflate(R.layout.item_app, parent, false);
             var entry = shown.get(position);
-            ((ImageView) view.findViewById(R.id.app_icon)).setImageDrawable(entry.icon);
+            var icon = (ImageView) view.findViewById(R.id.app_icon);
+            if (entry.icon != null) icon.setImageDrawable(entry.icon);
             ((TextView) view.findViewById(R.id.app_label)).setText(entry.label);
             var sub = new StringBuilder(entry.packageName);
             if (!entry.version.isEmpty()) sub.append(" · v").append(entry.version);
@@ -365,6 +408,8 @@ public class AppListActivity extends FragmentActivity {
                 sub.append(" · ").append(getString(R.string.app_state_disabled));
             }
             ((TextView) view.findViewById(R.id.app_sub)).setText(sub);
+            // ListView 的 onItemClick 会被行自身的可点击属性吃掉，直接绑定在这里
+            view.setOnClickListener(v -> showAppDialog(entry));
             return view;
         }
     }

@@ -25,7 +25,7 @@ public final class Privilege {
     public static final int MODE_SHIZUKU = 2;
 
     private static volatile int mode = -1;
-    private static Context appContext;
+    private static volatile Context appContext;
 
     private Privilege() {
     }
@@ -40,11 +40,16 @@ public final class Privilege {
 
     public static int mode() {
         var current = mode;
-        if (current < 0) {
-            current = detect();
-            mode = current;
+        if (current >= 0) return current;
+        synchronized (Privilege.class) {
+            if (mode < 0) mode = detect();
+            return mode;
         }
-        return current;
+    }
+
+    /** 只读缓存，不在 UI 线程触发 su 探测；未判定时返回 -1。 */
+    public static int modeOrUnknown() {
+        return mode;
     }
 
     public static void invalidate() {
@@ -182,12 +187,16 @@ public final class Privilege {
         }
         if (current == MODE_ROOT) {
             var pkg = RootShell.quote(info.packageName);
-            var user = String.valueOf(userId());
-            var result = RootShell.exec(RootInstaller.PM + " uninstall --user " + user + " " + pkg);
+            var result = RootShell.exec(RootInstaller.PM + " uninstall --user " + userId() + " " + pkg);
             if (result.succeeded()) return null;
-            var fallback = RootShell.exec(RootInstaller.PM + " uninstall " + pkg);
-            if (fallback.succeeded()) return null;
-            return join(result.text(), fallback.text());
+            // 系统应用不能按用户卸载，退而卸载更新（等价于 DELETE_SYSTEM_APP 的效果）。
+            // 故意不做不带 --user 的重试：那会把这个应用从所有用户（含工作资料/分身）里删掉。
+            var app = info.applicationInfo;
+            if (app != null && (app.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) {
+                var updates = RootShell.exec(RootInstaller.PM + " uninstall-system-updates " + pkg);
+                if (updates.ok()) return null;
+            }
+            return result.text();
         }
         return notGranted();
     }

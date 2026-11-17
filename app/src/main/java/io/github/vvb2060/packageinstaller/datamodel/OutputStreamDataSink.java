@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 public class OutputStreamDataSink implements DataSink {
     private final OutputStream out;
     private final Consumer<Integer> callback;
-    private ByteBuffer tmpBuffer;
+    private byte[] tmpBuffer;
 
     public OutputStreamDataSink(OutputStream out, Consumer<Integer> callback) {
         this.out = out;
@@ -26,13 +26,15 @@ public class OutputStreamDataSink implements DataSink {
             out.write(buf.array(), buf.arrayOffset() + buf.position(), remaining);
             buf.position(buf.limit());
         } else {
+            // 源 buffer 可能是 direct 的（FileDataSource.feed 就是），不能对 direct buffer 调 array()，
+            // 这里换成堆上的 byte[] 做中转。
             if (tmpBuffer == null) {
-                tmpBuffer = ByteBuffer.allocateDirect(64 * 1024);
+                tmpBuffer = new byte[64 * 1024];
             }
             while (buf.hasRemaining()) {
-                int chunkSize = Math.min(buf.remaining(), tmpBuffer.capacity());
-                buf.get(tmpBuffer.array(), tmpBuffer.arrayOffset(), chunkSize);
-                out.write(tmpBuffer.array(), tmpBuffer.arrayOffset(), chunkSize);
+                int chunkSize = Math.min(buf.remaining(), tmpBuffer.length);
+                buf.get(tmpBuffer, 0, chunkSize);
+                out.write(tmpBuffer, 0, chunkSize);
             }
         }
         callback.accept(remaining);

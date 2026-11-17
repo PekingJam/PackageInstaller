@@ -94,7 +94,8 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             v -> mViewModel.initiateInstall(isChecked(), true, full, remove));
         mPositiveButton.setFilterTouchesWhenObscured(true);
 
-        if (!mDialogData.apkLite.needSplit() || Privilege.mode() == Privilege.MODE_ROOT) {
+        if (!mDialogData.apkLite.needSplit()
+            || Privilege.modeOrUnknown() == Privilege.MODE_ROOT) {
             more.setVisibility(View.GONE);
         }
     }

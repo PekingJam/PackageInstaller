@@ -72,12 +72,17 @@ public class InstallViewModel extends AndroidViewModel {
                     pm.getLaunchIntentForPackage(packageName)));
                 return;
             }
+            if (cancelled) return;
             Privilege.prepare();
 
             var safeMode = mode != Privilege.MODE_ROOT
                 && sp.getBoolean("safe_mode", needSafeMode());
             repository = new InstallRepository(context, safeMode, installResult, stagingProgress);
             addCloseable(repository);
+            if (cancelled) {
+                repository.close();
+                return;
+            }
             repository.parseUri(intent);
         });
     }
@@ -117,8 +122,9 @@ public class InstallViewModel extends AndroidViewModel {
 
     public void cleanup() {
         if (cancelled) return;
-        repository.close();
         cancelled = true;
+        // 解析阶段还可能在等 su / Shizuku，此时 repository 尚未创建
+        if (repository != null) repository.close();
     }
 
     public boolean isCancelled() {

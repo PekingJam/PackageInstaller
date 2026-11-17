@@ -43,36 +43,44 @@ public final class RootInstaller {
         var sessionId = createSession(parser.totalSize(), installerPackage, packageName, full);
         try {
             parser.writeTo((name, size) -> openWrite(sessionId, name, size), progress);
+            commit(sessionId);
+        } catch (InstallException e) {
+            RootShell.exec(PM + " install-abandon " + sessionId);
+            throw e;
         } catch (IOException e) {
             RootShell.exec(PM + " install-abandon " + sessionId);
             throw e;
+        } catch (RuntimeException e) {
+            RootShell.exec(PM + " install-abandon " + sessionId);
+            throw new InstallException("INSTALL_FAILED_WRITE", e.toString());
         }
-        commit(sessionId);
     }
 
     private static int createSession(long totalSize, String installerPackage,
                                      String packageName, boolean full)
         throws InstallException {
-        var flags = new ArrayList<String>();
-        flags.add("-r");
-        flags.add("-d");
-        flags.add("--install-reason");
-        flags.add("4");
-        flags.add("--skip-verification");
+        // 每个元素是一组完整参数，剥离未知选项时整组去掉，不会留下孤立的值
+        var flags = new ArrayList<List<String>>();
+        flags.add(List.of("-r"));
+        flags.add(List.of("-d"));
+        flags.add(List.of("--install-reason", "4"));
+        flags.add(List.of("--skip-verification"));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            flags.add("--bypass-low-target-sdk-block");
-            flags.add("--update-ownership");
+            flags.add(List.of("--bypass-low-target-sdk-block"));
+            flags.add(List.of("--update-ownership"));
         }
+        // -p 在 pm 里会同时把会话设成 MODE_INHERIT_EXISTING（给已装应用补 split 用）
         if (!full && packageName != null) {
-            flags.add("-p");
-            flags.add(packageName);
+            flags.add(List.of("-p", packageName));
         }
 
         RootShell.Result result = null;
         for (int attempt = 0; attempt < 4; attempt++) {
             var command = new StringBuilder(PM + " install-create");
-            for (var flag : flags) {
-                command.append(' ').append(flag);
+            for (var group : flags) {
+                for (var token : group) {
+                    command.append(' ').append(token);
+                }
             }
             command.append(" -i ").append(RootShell.quote(installerPackage));
             command.append(" -S ").append(totalSize);
@@ -83,7 +91,8 @@ public final class RootInstaller {
             var matcher = UNKNOWN_OPTION.matcher(result.output);
             if (!matcher.find()) break;
             var unknown = matcher.group(1);
-            if (!flags.remove(unknown)) break;
+            var removed = flags.removeIf(group -> group.contains(unknown));
+            if (!removed) break;
         }
         if (result == null || !result.succeeded()) {
             throw new InstallException("INSTALL_FAILED_SESSION",
@@ -101,6 +110,11 @@ public final class RootInstaller {
         var handle = RootShell.start(PM + " install-write -S " + size + " " + sessionId
             + " " + RootShell.quote(name) + " -");
         return new FilterOutputStream(handle.stdin()) {
+            @Override
+            public void write(byte[] b, int off, int len) throws IOException {
+                out.write(b, off, len);
+            }
+
             @Override
             public void close() throws IOException {
                 var result = handle.finish(300_000);

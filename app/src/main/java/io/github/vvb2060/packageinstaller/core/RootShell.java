@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import android.os.SystemClock;
+
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
@@ -15,6 +17,7 @@ public final class RootShell {
     private static final long DEFAULT_TIMEOUT = 120_000L;
 
     private static volatile Boolean available;
+    private static volatile long detectedAt;
 
     private RootShell() {
     }
@@ -52,13 +55,23 @@ public final class RootShell {
             if (available == null) {
                 var result = exec("id", 30_000L);
                 available = result.code == 0 && result.output.contains("uid=0");
+                detectedAt = SystemClock.uptimeMillis();
             }
             return available;
         }
     }
 
+    /** 5 秒内不重复探测，免得 onResume 每次都弹一次 su 授权框。 */
     public static void invalidate() {
+        if (SystemClock.uptimeMillis() - detectedAt > 5_000L) {
+            available = null;
+        }
+    }
+
+    /** 无视节流强制重测（用户点「去授权」时用）。 */
+    public static void invalidateNow() {
         available = null;
+        detectedAt = 0;
     }
 
     public static String quote(String arg) {
@@ -142,7 +155,8 @@ public final class RootShell {
         }
 
         private String text() {
-            return buffer.toString(StandardCharsets.UTF_8);
+            // ByteArrayOutputStream.toString(Charset) 是 API 33 才有的
+            return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
         }
     }
 }

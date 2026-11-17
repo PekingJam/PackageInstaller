@@ -9,13 +9,20 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentFactory;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,12 +46,25 @@ public class MainActivity extends FragmentActivity {
     private TextView statusSubtitle;
     private LinearLayout checks;
     private TextView btnPrepare;
+    private CardDialog currentDialog;
     private boolean checking;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Fragment 恢复走默认无参构造会崩，这里按类名自己造
+        getSupportFragmentManager().setFragmentFactory(new FragmentFactory() {
+            @NonNull
+            @Override
+            public Fragment instantiate(@NonNull ClassLoader classLoader, @NonNull String className) {
+                if (className.equals(SettingsFragment.class.getName())) {
+                    return new SettingsFragment(new SettingsUserAction(readSafeMode()));
+                }
+                return super.instantiate(classLoader, className);
+            }
+        });
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        setupInsets();
         Privilege.attach(getApplicationContext());
 
         statusDot = findViewById(R.id.status_dot);
@@ -69,14 +89,43 @@ public class MainActivity extends FragmentActivity {
         findViewById(R.id.btn_refresh).setOnClickListener(v -> refresh(true));
         btnPrepare.setOnClickListener(v -> requestRoot());
 
-        var version = findViewById(R.id.version_text);
-        ((TextView) version).setText("v" + BuildConfig.VERSION_NAME + " · HyperOS Mod");
+        ((TextView) findViewById(R.id.version_text))
+            .setText("v" + BuildConfig.VERSION_NAME + " · HyperOS Mod");
+    }
+
+    private void setupInsets() {
+        var root = findViewById(R.id.root);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        var baseLeft = root.getPaddingLeft();
+        var baseTop = root.getPaddingTop();
+        var baseRight = root.getPaddingRight();
+        var baseBottom = root.getPaddingBottom();
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            var bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                | WindowInsetsCompat.Type.displayCutout());
+            view.setPadding(baseLeft + bars.left, baseTop + bars.top,
+                baseRight + bars.right, baseBottom + bars.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         refresh(true);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (currentDialog != null) currentDialog.dismiss();
+        main.removeCallbacksAndMessages(null);
+        executor.shutdownNow();
+        super.onDestroy();
+    }
+
+    private boolean readSafeMode() {
+        return getSharedPreferences(BuildConfig.APPLICATION_ID, MODE_PRIVATE)
+            .getBoolean("safe_mode", false);
     }
 
     private void bindCard(int id, int icon, int title, int desc, View.OnClickListener listener) {
@@ -103,7 +152,7 @@ public class MainActivity extends FragmentActivity {
                 running = Privilege.shizukuRunning();
                 granted = Privilege.shizukuGranted();
                 canInstall = Privilege.shizukuCanInstall();
-            } catch (RuntimeException e) {
+            } catch (Throwable e) {
                 main.post(() -> {
                     checking = false;
                     statusTitle.setText(R.string.status_none);
@@ -118,6 +167,7 @@ public class MainActivity extends FragmentActivity {
             final var resolvedCanInstall = canInstall;
             main.post(() -> {
                 checking = false;
+                if (isDestroyed()) return;
                 render(resolvedMode, resolvedRoot, resolvedRunning, resolvedGranted,
                     resolvedCanInstall);
             });
@@ -127,8 +177,8 @@ public class MainActivity extends FragmentActivity {
     private void render(int mode, boolean root, boolean running, boolean granted,
                         boolean canInstall) {
         var ready = mode != Privilege.MODE_NONE;
-        var dotColor = getColor(ready ? R.color.ui_ok : R.color.ui_warn);
-        statusDot.setBackgroundTintList(ColorStateList.valueOf(dotColor));
+        statusDot.setBackgroundTintList(ColorStateList.valueOf(
+            getColor(ready ? R.color.ui_ok : R.color.ui_warn)));
 
         String modeText;
         if (mode == Privilege.MODE_ROOT) {
@@ -164,7 +214,7 @@ public class MainActivity extends FragmentActivity {
                     : R.string.check_shizuku_perm_missing,
                 granted ? 0 : R.string.btn_request, v -> {
                     Privilege.requestShizukuPermission();
-                    main.postDelayed(() -> refresh(false), 1500);
+                    main.postDelayed(() -> refresh(true), 1500);
                 });
         }
         if (granted) {
@@ -175,7 +225,8 @@ public class MainActivity extends FragmentActivity {
         }
     }
 
-    private void addCheck(boolean ok, int title, int desc, int action, View.OnClickListener listener) {
+    private void addCheck(boolean ok, int title, int desc, int action,
+                          View.OnClickListener listener) {
         var row = getLayoutInflater().inflate(R.layout.item_check_row, checks, false);
         var icon = (ImageView) row.findViewById(R.id.check_icon);
         icon.setImageResource(ok ? R.drawable.ic_check_circle : R.drawable.ic_alert);
@@ -194,10 +245,12 @@ public class MainActivity extends FragmentActivity {
 
     private void requestRoot() {
         executor.execute(() -> {
-            RootShell.invalidate();
+            RootShell.invalidateNow();
             var granted = RootShell.isAvailable();
             main.post(() -> {
-                Toast.makeText(this, granted ? R.string.status_root_ok : R.string.root_request_failed,
+                if (isDestroyed()) return;
+                Toast.makeText(this,
+                    granted ? R.string.status_root_ok : R.string.root_request_failed,
                     Toast.LENGTH_SHORT).show();
                 refresh(true);
             });
@@ -249,6 +302,7 @@ public class MainActivity extends FragmentActivity {
 
     private void showUrlDialog() {
         var dialog = CardDialog.create(this);
+        currentDialog = dialog;
         dialog.icon(R.drawable.ic_globe)
             .title(R.string.url_dialog_title)
             .message(R.string.url_dialog_label);
@@ -257,7 +311,7 @@ public class MainActivity extends FragmentActivity {
         input.setHint(R.string.url_dialog_hint);
         input.setSingleLine(true);
         input.setTextSize(14);
-        input.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         dialog.addContent(input);
 
         dialog.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
@@ -270,20 +324,22 @@ public class MainActivity extends FragmentActivity {
                 Toast.makeText(this, R.string.error_parse, Toast.LENGTH_SHORT).show();
                 return;
             }
-            var intent = new Intent(this, InstallLaunch.class)
+            startActivity(new Intent(this, InstallLaunch.class)
                 .setAction(Intent.ACTION_SEND)
                 .setType("text/plain")
-                .putExtra(Intent.EXTRA_TEXT, url);
-            startActivity(intent);
+                .putExtra(Intent.EXTRA_TEXT, url));
         });
+        var window = dialog.dialog().getWindow();
+        if (window != null) {
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
         dialog.show();
-        input.requestFocus();
+        input.post(input::requestFocus);
     }
 
     private void showSettings() {
-        var safeMode = getSharedPreferences(BuildConfig.APPLICATION_ID, MODE_PRIVATE)
-            .getBoolean("safe_mode", false);
-        new SettingsFragment(new SettingsUserAction(safeMode))
+        new SettingsFragment(new SettingsUserAction(readSafeMode()))
             .show(getSupportFragmentManager(), "settings");
     }
 }
