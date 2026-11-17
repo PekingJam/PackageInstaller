@@ -375,7 +375,7 @@ public class AppListActivity extends FragmentActivity {
             if (entry.icon != null) {
                 icon.setImageDrawable(entry.icon);
             } else {
-                icon.setImageResource(android.R.drawable.sym_def_app_icon);
+                icon.setImageResource(R.drawable.ic_app_placeholder);
             }
             ((TextView) view.findViewById(R.id.app_label)).setText(entry.label);
             var sub = new StringBuilder(entry.packageName);

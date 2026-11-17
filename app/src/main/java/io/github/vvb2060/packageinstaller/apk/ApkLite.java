@@ -62,6 +62,15 @@ public class ApkLite {
         if (icon != null) {
             return icon;
         }
+        // 网络预览只能读到 AndroidManifest，拿不到 APK 自己的图标资源，
+        // 这里用自己的占位图标（绿色机器人 + 白底），不要落到 ROM 的默认图标。
+        var context = io.github.vvb2060.packageinstaller.core.Privilege.context();
+        if (context != null) {
+            try {
+                return context.getDrawable(io.github.vvb2060.packageinstaller.R.drawable.ic_app_placeholder);
+            } catch (RuntimeException ignored) {
+            }
+        }
         return Resources.getSystem().getDrawable(android.R.drawable.sym_def_app_icon, null);
     }
 

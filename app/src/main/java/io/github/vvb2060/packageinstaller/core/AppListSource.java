@@ -83,7 +83,10 @@ public final class AppListSource {
     public static void details(Context context, Entry entry) {
         if (entry.icon != null && !entry.label.equals(entry.packageName)) return;
         fillFromArchive(context.getPackageManager(), entry);
-        if (entry.icon == null) entry.icon = context.getPackageManager().getDefaultActivityIcon();
+        if (entry.icon == null) {
+            entry.icon = context.getDrawable(
+                io.github.vvb2060.packageinstaller.R.drawable.ic_app_placeholder);
+        }
     }
 
     public static List<Entry> load(Context context) {
