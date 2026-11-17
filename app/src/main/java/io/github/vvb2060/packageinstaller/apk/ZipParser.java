@@ -16,6 +16,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -163,6 +164,49 @@ public class ZipParser {
         }
         if (apksRecords != null) {
             sessionWriteApks(session, liveData);
+        }
+    }
+
+    /** 待安装内容的总字节数，用于 pm install-create -S。 */
+    public long totalSize() {
+        if (installName != null) return dataSource.size();
+        if (apksRecords != null) {
+            return apksRecords.stream()
+                .mapToLong(CentralDirectoryRecord::getUncompressedSize)
+                .sum();
+        }
+        return 0;
+    }
+
+    public interface EntrySink {
+        OutputStream open(String name, long size) throws IOException;
+    }
+
+    /** 与 sessionWrite 相同的遍历顺序，但把内容写到任意目标（Root 模式走 su 的 stdin）。 */
+    public void writeTo(EntrySink target, MutableLiveData<Integer> liveData) throws IOException {
+        liveData.postValue(0);
+        if (installName != null) {
+            long total = dataSource.size();
+            var progress = new Progress(liveData, total);
+            try (var out = target.open(installName, total)) {
+                dataSource.feed(0, total, new OutputStreamDataSink(out, progress));
+            }
+            return;
+        }
+        if (apksRecords == null) return;
+
+        var progress = new Progress(liveData, totalSize());
+        for (int i = 0, size = apksRecords.size(); i < size; i++) {
+            var record = apksRecords.get(i);
+            var fileName = record.getName();
+            int slash = fileName.lastIndexOf('/');
+            if (slash >= 0) fileName = fileName.substring(slash + 1);
+            try (var out = target.open(fileName, record.getUncompressedSize())) {
+                var sink = new OutputStreamDataSink(out, progress);
+                LocalFileRecord.outputUncompressedData(dataSource, record, cdStartOffset, sink);
+            } catch (ZipFormatException e) {
+                throw new IOException(e);
+            }
         }
     }
 

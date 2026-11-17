@@ -19,6 +19,7 @@ import java.util.concurrent.Executors;
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.core.BinderWrapper;
 import io.github.vvb2060.packageinstaller.core.InstallRepository;
+import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.PreferredActivity;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
@@ -56,21 +57,25 @@ public class InstallViewModel extends AndroidViewModel {
         executor.execute(() -> {
             var context = getApplication();
             var pm = context.getPackageManager();
-            ShizukuProvider.waitForBinder(context);
-            if (Shizuku.getBinder() == null
-                || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED
-                || Shizuku.checkRemotePermission(Manifest.permission.INSTALL_PACKAGES)
-                != PackageManager.PERMISSION_GRANTED) {
+            Privilege.attach(context);
+            if (!Privilege.rootGranted()) {
+                ShizukuProvider.waitForBinder(context);
+            }
+            var mode = Privilege.mode();
+            if (mode == Privilege.MODE_NONE) {
+                installResult.postValue(new InstallAborted(InstallAborted.ABORT_PRIVILEGE));
+                return;
+            }
+            if (mode == Privilege.MODE_SHIZUKU && !Privilege.shizukuCanInstall()) {
                 var packageName = rikka.shizuku.ShizukuProvider.MANAGER_APPLICATION_ID;
                 installResult.postValue(new InstallAborted(InstallAborted.ABORT_SHIZUKU,
                     pm.getLaunchIntentForPackage(packageName)));
                 return;
             }
-            BinderWrapper.init(context);
-            BinderWrapper.disableAdbVerify(context);
-            PreferredActivity.set(pm);
+            Privilege.prepare();
 
-            var safeMode = sp.getBoolean("safe_mode", needSafeMode());
+            var safeMode = mode != Privilege.MODE_ROOT
+                && sp.getBoolean("safe_mode", needSafeMode());
             repository = new InstallRepository(context, safeMode, installResult, stagingProgress);
             addCloseable(repository);
             repository.parseUri(intent);
@@ -89,10 +94,11 @@ public class InstallViewModel extends AndroidViewModel {
     }
 
     private static boolean needSafeMode() {
+        if (Privilege.mode() != Privilege.MODE_SHIZUKU) return false;
         var packageName = PreferredActivity.getSystemInstaller();
         if (packageName == null) return false;
         try {
-            var info = BinderWrapper.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS);
+            var info = Privilege.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS);
             var perms = info.requestedPermissions;
             if (perms == null) return false;
             var list = List.of(perms);

@@ -1,9 +1,7 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.DialogInterface;
 import android.content.pm.ApplicationInfo;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
@@ -21,7 +19,6 @@ import android.view.View;
 import android.widget.CheckBox;
 import android.widget.TextView;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.Locale;
@@ -30,39 +27,51 @@ import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.apksig.Parser;
 import io.github.vvb2060.packageinstaller.apksig.Signer;
 import io.github.vvb2060.packageinstaller.apksig.Span;
+import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.installmodel.InstallUserAction;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class InstallConfirmationFragment extends BaseDialogFragment {
 
     private final InstallUserAction mDialogData;
-    private AlertDialog mDialog;
     private CheckBox mCheckBox;
-    private TextView mTextView;
+    private TextView mPositiveButton;
+    private boolean mFirstCreate;
 
     public InstallConfirmationFragment(InstallUserAction dialogData) {
         super(dialogData);
         mDialogData = dialogData;
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mFirstCreate = savedInstanceState == null;
+    }
+
+    @Override
+    protected void onBuild(CardDialog card) {
         var context = requireContext();
-        View dialogView = getLayoutInflater().inflate(R.layout.install_content_view, null);
-        mTextView = dialogView.requireViewById(R.id.message);
-        mCheckBox = dialogView.requireViewById(R.id.checkbox);
+        card.dialog().setCanceledOnTouchOutside(false);
+        card.icon(mDialogData.apkLite.getIcon())
+            .title(mDialogData.apkLite.getLabel());
+
+        var textView = card.messageView();
         if (mDialogData.setInstaller) {
+            mCheckBox = new CheckBox(context);
             mCheckBox.setText(R.string.set_installer);
-            mCheckBox.setVisibility(View.VISIBLE);
+            mCheckBox.setTextSize(13);
+            mCheckBox.setButtonTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
+            card.addContent(mCheckBox);
         }
 
         var sb = new SpannableStringBuilder();
-        appendBaseInfo(sb);
-        appendSignInfo(sb);
-        var remove = appendQuestion(sb, savedInstanceState == null);
-        mTextView.setText(sb, TextView.BufferType.SPANNABLE);
-        mTextView.setTextIsSelectable(true);
-        mTextView.setMovementMethod(new LinkMovementMethod() {
+        appendBaseInfo(sb, textView);
+        appendSignInfo(sb, textView);
+        var remove = appendQuestion(sb, textView, mFirstCreate);
+        textView.setText(sb, TextView.BufferType.SPANNABLE);
+        textView.setTextIsSelectable(true);
+        textView.setMovementMethod(new LinkMovementMethod() {
             @Override
             public boolean onTouchEvent(TextView widget, Spannable buffer, MotionEvent event) {
                 var ret = super.onTouchEvent(widget, buffer, event);
@@ -73,52 +82,49 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
 
         var old = mDialogData.oldApk;
         var full = mDialogData.fullInstall;
-        mDialog = new AlertDialog.Builder(context)
-            .setIcon(mDialogData.apkLite.getIcon())
-            .setTitle(mDialogData.apkLite.getLabel())
-            .setView(dialogView)
-            .setPositiveButton(old != null ? R.string.update : R.string.install, (_, _) ->
-                mViewModel.initiateInstall(mCheckBox.isChecked(), true, full, remove))
-            .setNegativeButton(android.R.string.cancel, (_, _) -> finish())
-            .setNeutralButton(remove ? R.string.remove_more : R.string.add_more, (_, _) ->
-                mViewModel.initiateInstall(mCheckBox.isChecked(), false, full, remove))
-            .create();
-        mDialog.setCanceledOnTouchOutside(false);
-        return mDialog;
+
+        card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
+            v -> finish());
+        var more = card.button(getString(remove ? R.string.remove_more : R.string.add_more),
+            R.style.Button_Pill_Tonal,
+            v -> mViewModel.initiateInstall(isChecked(), false, full, remove));
+        mPositiveButton = card.button(
+            getString(old != null ? R.string.update : R.string.install),
+            R.style.Button_Pill,
+            v -> mViewModel.initiateInstall(isChecked(), true, full, remove));
+        mPositiveButton.setFilterTouchesWhenObscured(true);
+
+        if (!mDialogData.apkLite.needSplit() || Privilege.mode() == Privilege.MODE_ROOT) {
+            more.setVisibility(View.GONE);
+        }
     }
 
-    @Override
-    public void onStart() {
-        super.onStart();
-        mDialog.getButton(DialogInterface.BUTTON_NEGATIVE).setFocusedByDefault(true);
-        mDialog.getButton(DialogInterface.BUTTON_POSITIVE).setFilterTouchesWhenObscured(true);
-        if (!mDialogData.apkLite.needSplit()) {
-            mDialog.getButton(DialogInterface.BUTTON_NEUTRAL).setVisibility(View.GONE);
-        }
+    private boolean isChecked() {
+        return mCheckBox != null && mCheckBox.isChecked();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        mDialog.getButton(DialogInterface.BUTTON_POSITIVE).setEnabled(false);
+        if (mPositiveButton != null) mPositiveButton.setEnabled(false);
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        mDialog.getButton(DialogInterface.BUTTON_POSITIVE).setEnabled(true);
+        if (mPositiveButton != null) mPositiveButton.setEnabled(true);
     }
 
-    private void appendBaseInfo(SpannableStringBuilder sb) {
+    private void appendBaseInfo(SpannableStringBuilder sb, TextView textView) {
         var apk = mDialogData.apkLite;
         var old = mDialogData.oldApk;
-        append(sb, R.string.package_name, apk.packageName);
-        append(sb, R.string.size, formatBytes(apk.size));
+        append(sb, textView, R.string.package_name, apk.packageName);
+        append(sb, textView, R.string.size, formatBytes(apk.size));
         if (apk.needSplit()) {
-            append(sb, R.string.split_name, apk.splitName);
-            append(sb, R.string.split_types, apk.splitTypes);
-            append(sb, R.string.required_split_types, apk.requiredSplitTypes);
-            append(sb, R.string.config_for_split, apk.configForSplit);
+            append(sb, textView, R.string.split_name, apk.splitName);
+            append(sb, textView, R.string.split_types, apk.splitTypes);
+            append(sb, textView, R.string.required_split_types, apk.requiredSplitTypes);
+            append(sb, textView, R.string.config_for_split, apk.configForSplit);
         }
         if (apk.isSplit()) return;
 
@@ -129,28 +135,29 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             var oldVer = old.versionName + " (" + old.getLongVersionCode() + ")";
             var oldMin = getAndroidName(old.applicationInfo.minSdkVersion);
             var oldTarget = getAndroidName(old.applicationInfo.targetSdkVersion);
-            append(sb, oldVer, old.getLongVersionCode(), ver, apk.versionCode);
-            append(sb, R.string.min_sdk, oldMin, min);
-            append(sb, R.string.target_sdk, oldTarget, target);
+            append(sb, textView, oldVer, old.getLongVersionCode(), ver, apk.versionCode);
+            append(sb, textView, R.string.min_sdk, oldMin, min);
+            append(sb, textView, R.string.target_sdk, oldTarget, target);
         } else {
-            append(sb, R.string.version, ver);
-            append(sb, R.string.min_sdk, min);
-            append(sb, R.string.target_sdk, target);
+            append(sb, textView, R.string.version, ver);
+            append(sb, textView, R.string.min_sdk, min);
+            append(sb, textView, R.string.target_sdk, target);
         }
     }
 
-    private void append(SpannableStringBuilder sb, int label, String now) {
+    private void append(SpannableStringBuilder sb, TextView textView, int label, String now) {
         if (now != null && !now.isEmpty()) {
-            sb.append(mTextView.getResources().getString(label));
+            sb.append(textView.getResources().getString(label));
             sb.append(now).append("\n");
         }
     }
 
-    private void append(SpannableStringBuilder sb, int label, String old, String now) {
+    private void append(SpannableStringBuilder sb, TextView textView, int label,
+                        String old, String now) {
         if (old.equals(now)) {
-            append(sb, label, now);
+            append(sb, textView, label, now);
         } else {
-            sb.append(mTextView.getResources().getString(label));
+            sb.append(textView.getResources().getString(label));
             sb.append(old);
             sb.append(" → ");
             sb.append(now, new StyleSpan(Typeface.BOLD),
@@ -159,13 +166,13 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
         }
     }
 
-    private void append(SpannableStringBuilder sb, String old, long oldVer,
+    private void append(SpannableStringBuilder sb, TextView textView, String old, long oldVer,
                         String now, long nowVer) {
         if (old.equals(now)) {
-            append(sb, R.string.version, now);
+            append(sb, textView, R.string.version, now);
             return;
         }
-        var label = mTextView.getResources().getString(R.string.version);
+        var label = textView.getResources().getString(R.string.version);
         var oldStart = sb.length();
         sb.append(old).append("\n");
         var newStart = sb.length();
@@ -209,11 +216,11 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 
-    private void appendSignInfo(SpannableStringBuilder sb) {
+    private void appendSignInfo(SpannableStringBuilder sb, TextView textView) {
         var map = mDialogData.apkLite.signingBlock;
         if (map == null || map.isEmpty()) return;
-        sb.append(mTextView.getResources().getString(R.string.signing_block));
-        Span.appendSignInfo(sb, mTextView, map);
+        sb.append(textView.getResources().getString(R.string.signing_block));
+        Span.appendSignInfo(sb, textView, map);
         sb.append("\n");
 
         var stamp = map.get(Parser.V2_SOURCE_STAMP_BLOCK_ID);
@@ -222,12 +229,13 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             var stampTime = Signer.FORMATTER.format(signer.stampTime);
             var hasFrosting = map.get(Parser.GOOGLE_PLAY_FROSTING_BLOCK_ID) != null;
             var id = hasFrosting ? R.string.google_source_play : R.string.google_source;
-            sb.append(mTextView.getResources().getString(id, stampTime));
+            sb.append(textView.getResources().getString(id, stampTime));
             sb.append("\n");
         }
     }
 
-    private boolean appendQuestion(SpannableStringBuilder sb, boolean needDefault) {
+    private boolean appendQuestion(SpannableStringBuilder sb, TextView textView,
+                                   boolean needDefault) {
         var old = mDialogData.oldApk;
         var full = mDialogData.fullInstall;
         int question = R.string.install_confirm_question;
@@ -248,7 +256,7 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             var flags = old.applicationInfo.flags;
             var system = (flags & ApplicationInfo.FLAG_SYSTEM) != 0;
             var installed = (flags & ApplicationInfo.FLAG_INSTALLED) != 0;
-            if (mDialogData.setInstaller && system && needDefault) {
+            if (mCheckBox != null && mDialogData.setInstaller && system && needDefault) {
                 mCheckBox.setChecked(true);
             }
             if (installed) {
@@ -256,7 +264,7 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             }
         }
 
-        var resources = mTextView.getResources();
+        var resources = textView.getResources();
         var string = resources.getString(question);
 
         var isSame = mDialogData.apkLite.isSame;
@@ -293,7 +301,7 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             var api = Integer.parseInt(apiLevel);
             return getAndroidName(api);
         } catch (NumberFormatException ignored) {
-            return "Android " + apiLevel + " (" + Build.VERSION_CODES.CUR_DEVELOPMENT + ")";
+            return "Android " + apiLevel;
         }
     }
 

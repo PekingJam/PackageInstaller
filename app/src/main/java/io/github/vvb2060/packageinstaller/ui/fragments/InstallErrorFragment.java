@@ -1,19 +1,16 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Bundle;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
-import rikka.shizuku.Shizuku;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
+import io.github.vvb2060.packageinstaller.ui.MainActivity;
 
 public final class InstallErrorFragment extends BaseDialogFragment {
 
@@ -32,51 +29,56 @@ public final class InstallErrorFragment extends BaseDialogFragment {
         }
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+    protected void onBuild(CardDialog card) {
         var code = mAborted.abortReason;
-        var context = requireContext();
-        return new AlertDialog.Builder(context)
-            .setTitle(R.string.error_title)
-            .setIcon(R.drawable.ic_app_icon)
-            .setMessage(getErrorMessage(context, code))
-            .setPositiveButton(android.R.string.ok, (_, _) -> {
-                if (code == InstallAborted.ABORT_SHIZUKU) {
+        card.icon(R.drawable.ic_alert)
+            .title(R.string.error_title)
+            .message(getErrorMessage(requireContext(), code));
+
+        if (code == InstallAborted.ABORT_PRIVILEGE || code == InstallAborted.ABORT_SHIZUKU) {
+            card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
+                v -> finish());
+            card.button(getString(R.string.grant), R.style.Button_Pill, v -> {
+                if (code == InstallAborted.ABORT_PRIVILEGE) {
+                    var intent = new Intent(requireContext(), MainActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    requireContext().startActivity(intent);
+                } else {
                     checkShizuku();
                 }
                 finish();
-            })
-            .create();
+            });
+        } else {
+            card.button(getString(android.R.string.ok), R.style.Button_Pill, v -> finish());
+        }
     }
 
     private void checkShizuku() {
-        if (Shizuku.pingBinder()) {
-            Shizuku.requestPermission(1);
+        if (Privilege.shizukuRunning()) {
+            Privilege.requestShizukuPermission();
             return;
         }
         var intent = mAborted.intent;
-        if (intent == null) {
-            var web = Uri.parse("https://github.com/RikkaApps/Shizuku");
-            intent = new Intent(Intent.ACTION_VIEW, web);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        }
-        startActivitySafe(intent, false);
+        if (intent != null) startActivitySafe(intent, false);
     }
 
     private String getErrorMessage(Context context, int code) {
+        if (code == InstallAborted.ABORT_PRIVILEGE) {
+            return context.getString(R.string.error_privilege);
+        }
         if (mViewModel.isCancelled()) {
             return context.getString(R.string.error_cancelled);
         }
         if (code == InstallAborted.ABORT_SHIZUKU) {
-            if (!Shizuku.pingBinder()) {
+            if (!Privilege.shizukuRunning()) {
                 if (mAborted.intent == null) {
                     return context.getString(R.string.error_shizuku_notfound);
                 } else {
                     return context.getString(R.string.error_shizuku_notrunning);
                 }
             }
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            if (!Privilege.shizukuGranted()) {
                 return context.getString(R.string.error_shizuku_notpermitted);
             } else {
                 return context.getString(R.string.error_shizuku_unavailable);

@@ -2,4 +2,23 @@
 <resources>
     <color name="ic_launcher_foreground">#004499</color>
     <color name="ic_launcher_background">#E1F5FE</color>
+
+    <color name="ui_primary">#8FCEFF</color>
+    <color name="ui_primary_pressed">#BFE0FF</color>
+    <color name="ui_on_primary">#00314F</color>
+    <color name="ui_primary_container">#00496F</color>
+    <color name="ui_on_primary_container">#CFE5FF</color>
+
+    <color name="ui_surface">#101418</color>
+    <color name="ui_surface_container">#1A1F24</color>
+    <color name="ui_surface_container_high">#252B31</color>
+    <color name="ui_on_surface">#E3E2E6</color>
+    <color name="ui_on_surface_variant">#C1C7CE</color>
+    <color name="ui_outline">#8B9298</color>
+    <color name="ui_outline_soft">#2C3238</color>
+
+    <color name="ui_error">#FFB4AB</color>
+    <color name="ui_ok">#8ED69A</color>
+    <color name="ui_warn">#FFC46B</color>
+    <color name="ui_ripple">#33FFFFFF</color>
 </resources>

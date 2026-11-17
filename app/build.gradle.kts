@@ -16,13 +16,31 @@ android {
     enableKotlin = false
     namespace = "io.github.vvb2060.packageinstaller"
     defaultConfig {
-        versionCode = 14
-        versionName = "2.0"
+        applicationId = "com.hyperosmod.packageinstaller"
+        versionCode = 15
+        versionName = "2.1"
+    }
+    signingConfigs {
+        create("release") {
+            val keystore = file("../keystore.jks")
+            if (keystore.exists()) {
+                storeFile = keystore
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+            enableV1Signing = true
+            enableV2Signing = true
+        }
     }
     buildTypes {
         release {
             vcsInfo.include = false
-            signingConfig = signingConfigs["debug"]
+            signingConfig = if (file("../keystore.jks").exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             optimization {
                 enable = true
                 keepRules {

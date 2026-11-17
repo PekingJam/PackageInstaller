@@ -1,67 +1,60 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.DialogInterface;
-import android.os.Bundle;
-import android.view.View;
+import android.content.res.ColorStateList;
 import android.widget.CheckBox;
 import android.widget.TextView;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import io.github.vvb2060.packageinstaller.R;
-import io.github.vvb2060.packageinstaller.core.BinderWrapper;
+import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.installmodel.PackageUserAction;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class UninstallConfirmationFragment extends BaseDialogFragment {
 
     private final PackageUserAction mDialogData;
-    private AlertDialog mDialog;
 
     public UninstallConfirmationFragment(PackageUserAction dialogData) {
         super(dialogData);
         mDialogData = dialogData;
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        View dialogView = getLayoutInflater().inflate(R.layout.install_content_view, null);
-        TextView textView = dialogView.requireViewById(R.id.message);
-        textView.setText(R.string.uninstall_confirm_question);
-        CheckBox checkBox = dialogView.requireViewById(R.id.checkbox);
-        checkBox.setVisibility(View.VISIBLE);
-        checkBox.setText(R.string.only_clear_data);
-        checkBox.setOnCheckedChangeListener((_, isChecked) -> {
-            var button = mDialog.getButton(DialogInterface.BUTTON_POSITIVE);
-            button.setText(isChecked ? R.string.clear : R.string.uninstall);
-        });
-        var app = mDialogData.info.applicationInfo;
-        assert app != null;
-        var enabled = app.enabled;
-        int text = enabled ? R.string.disable : R.string.enable;
+    protected void onBuild(CardDialog card) {
+        var context = requireContext();
         var apk = mDialogData.apkLite;
-        mDialog = new AlertDialog.Builder(requireContext())
-            .setTitle(apk.getLabel())
-            .setIcon(apk.getIcon())
-            .setView(dialogView)
-            .setNegativeButton(android.R.string.cancel, (_, _) -> finish())
-            .setPositiveButton(R.string.uninstall, (_, _) -> {
-                if (checkBox.isChecked()) {
-                    BinderWrapper.clearApplicationUserData(apk.packageName);
-                } else {
-                    BinderWrapper.uninstallPackage(mDialogData.info);
-                }
-                finish();
-            })
-            .setNeutralButton(text, (_, _) -> {
-                BinderWrapper.setPackageEnabled(apk.packageName, !enabled);
-                finish();
-            })
-            .create();
-        return mDialog;
-    }
+        var app = mDialogData.info.applicationInfo;
+        var enabled = app == null || app.enabled;
 
+        card.icon(apk.getIcon())
+            .title(apk.getLabel())
+            .message(context.getString(R.string.uninstall_confirm_question));
+
+        var checkBox = new CheckBox(context);
+        checkBox.setText(R.string.only_clear_data);
+        checkBox.setTextSize(13);
+        checkBox.setButtonTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
+        card.addContent(checkBox);
+
+        card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
+            v -> finish());
+        card.button(getString(enabled ? R.string.disable : R.string.enable),
+            R.style.Button_Pill_Tonal, v -> {
+                runAction(() -> Privilege.setEnabled(apk.packageName, !enabled));
+                finish();
+            });
+        var positive = card.button(getString(R.string.uninstall), R.style.Button_Pill_Danger,
+            v -> {
+                var clear = checkBox.isChecked();
+                runAction(() -> {
+                    if (clear) {
+                        Privilege.clearApplicationUserData(apk.packageName);
+                    } else {
+                        Privilege.uninstall(mDialogData.info);
+                    }
+                });
+                finish();
+            });
+        checkBox.setOnCheckedChangeListener((button, checked) ->
+            positive.setText(checked ? R.string.clear : R.string.uninstall));
+    }
 }

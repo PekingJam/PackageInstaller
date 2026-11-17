@@ -1,20 +1,13 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.net.Uri;
-import android.os.Bundle;
-import android.util.Log;
-import android.view.View;
 import android.widget.CheckBox;
-import android.widget.TextView;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.installmodel.SettingsUserAction;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class SettingsFragment extends BaseDialogFragment {
 
@@ -25,38 +18,35 @@ public final class SettingsFragment extends BaseDialogFragment {
         mDialogData = dialogData;
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        Log.d("SettingsFragment", "onCreateDialog: " + savedInstanceState);
-        View dialogView = getLayoutInflater().inflate(R.layout.install_content_view, null);
-        TextView textView = dialogView.requireViewById(R.id.message);
-        textView.setText(R.string.settings_safe_mode);
-        CheckBox checkBox = dialogView.requireViewById(R.id.checkbox);
-        checkBox.setVisibility(View.VISIBLE);
+    protected void onBuild(CardDialog card) {
+        var context = requireContext();
+        card.icon(R.drawable.ic_app_icon)
+            .title(R.string.app_name)
+            .message(R.string.settings_safe_mode);
+
+        var checkBox = new CheckBox(context);
         checkBox.setText(R.string.safe_mode);
-        if (savedInstanceState == null) {
-            checkBox.setChecked(mDialogData.safeMode);
-        }
-        return new AlertDialog.Builder(requireContext())
-            .setTitle(R.string.app_name)
-            .setIcon(R.drawable.ic_app_icon)
-            .setView(dialogView)
-            .setPositiveButton(android.R.string.ok, (_, _) -> {
-                var checked = checkBox.isChecked();
-                if (checked != mDialogData.safeMode) {
-                    mViewModel.setSafeMode(checked);
-                }
-                finish();
-            })
-            .setNegativeButton(android.R.string.cancel, (_, _) -> finish())
-            .setNeutralButton(R.string.launch, (_, _) -> {
-                var web = Uri.parse("https://github.com/vvb2060/PackageInstaller");
-                var intent = new Intent(Intent.ACTION_VIEW, web);
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivitySafe(intent, false);
-                finish();
-            })
-            .create();
+        checkBox.setTextSize(13);
+        checkBox.setButtonTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
+        checkBox.setChecked(mDialogData.safeMode);
+        card.addContent(checkBox);
+
+        card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
+            v -> finishOrDismiss());
+        card.button(getString(R.string.launch), R.style.Button_Pill_Tonal, v -> {
+            var web = Uri.parse("https://github.com/PekingJam/PackageInstaller");
+            var intent = new Intent(Intent.ACTION_VIEW, web);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivitySafe(intent, false);
+            finishOrDismiss();
+        });
+        card.button(getString(android.R.string.ok), R.style.Button_Pill, v -> {
+            var checked = checkBox.isChecked();
+            if (checked != mDialogData.safeMode) {
+                mViewModel.setSafeMode(checked);
+            }
+            finishOrDismiss();
+        });
     }
 }

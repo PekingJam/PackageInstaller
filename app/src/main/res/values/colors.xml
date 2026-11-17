@@ -2,4 +2,24 @@
 <resources>
     <color name="ic_launcher_foreground">#FFFFFF</color>
     <color name="ic_launcher_background">#0099CC</color>
+
+    <!-- 语义色：Android 12 以下用固定蓝，v31 起跟随系统动态取色 -->
+    <color name="ui_primary">#00639B</color>
+    <color name="ui_primary_pressed">#005680</color>
+    <color name="ui_on_primary">#FFFFFF</color>
+    <color name="ui_primary_container">#CFE5FF</color>
+    <color name="ui_on_primary_container">#001D33</color>
+
+    <color name="ui_surface">#FBFCFF</color>
+    <color name="ui_surface_container">#EEF2F8</color>
+    <color name="ui_surface_container_high">#E3E9F1</color>
+    <color name="ui_on_surface">#191C20</color>
+    <color name="ui_on_surface_variant">#454B52</color>
+    <color name="ui_outline">#C2C9D0</color>
+    <color name="ui_outline_soft">#E2E7ED</color>
+
+    <color name="ui_error">#BA1A1A</color>
+    <color name="ui_ok">#2E7D32</color>
+    <color name="ui_warn">#B26A00</color>
+    <color name="ui_ripple">#1F000000</color>
 </resources>

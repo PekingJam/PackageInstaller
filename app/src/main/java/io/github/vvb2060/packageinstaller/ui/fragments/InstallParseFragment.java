@@ -1,17 +1,12 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.os.Bundle;
-import android.view.View;
+import android.content.res.ColorStateList;
+import android.view.ViewGroup;
 import android.widget.ProgressBar;
-import android.widget.TextView;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class InstallParseFragment extends BaseDialogFragment {
 
@@ -19,20 +14,21 @@ public final class InstallParseFragment extends BaseDialogFragment {
         super(dialogData);
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        View dialogView = getLayoutInflater().inflate(R.layout.install_content_view, null);
-        ProgressBar progressBar = dialogView.requireViewById(R.id.progress);
-        progressBar.setVisibility(View.VISIBLE);
-        TextView textView = dialogView.requireViewById(R.id.message);
-        textView.setText(R.string.parsing);
+    protected void onBuild(CardDialog card) {
         setCancelable(false);
-        return new AlertDialog.Builder(requireContext())
-            .setTitle(R.string.app_name)
-            .setIcon(R.drawable.ic_app_icon)
-            .setView(dialogView)
-            .setNegativeButton(android.R.string.cancel, (_, _) -> mViewModel.cleanup())
-            .create();
+        card.icon(R.drawable.ic_app_icon)
+            .title(R.string.app_name)
+            .message(R.string.parsing);
+
+        var progress = new ProgressBar(requireContext(), null,
+            android.R.attr.progressBarStyleHorizontal);
+        progress.setIndeterminate(true);
+        progress.setIndeterminateTintList(ColorStateList.valueOf(
+            requireContext().getColor(R.color.ui_primary)));
+        card.addContent(progress);
+
+        card.button(getString(android.R.string.cancel), R.style.Button_Pill_Tonal,
+            v -> mViewModel.cleanup());
     }
 }

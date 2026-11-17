@@ -72,7 +72,7 @@ public class InstallRepository implements Closeable {
         if (safeMode) {
             packageInstaller = packageManager.getPackageInstaller();
         } else {
-            packageInstaller = BinderWrapper.installer;
+            packageInstaller = Privilege.packageInstaller();
         }
         this.safeMode = safeMode;
         this.installResult = installResult;
@@ -125,6 +125,10 @@ public class InstallRepository implements Closeable {
 
     public void install(boolean setInstaller, boolean commit, boolean full, boolean removeSplit) {
         installResult.postValue(new InstallInstalling(apkLite));
+        if (Privilege.mode() == Privilege.MODE_ROOT) {
+            rootInstall(setInstaller, commit, full, removeSplit);
+            return;
+        }
         if (zipParser == null) {
             installPackageUri();
             return;
@@ -132,7 +136,7 @@ public class InstallRepository implements Closeable {
 
         if (sessionId == SessionInfo.INVALID_ID) {
             try {
-                BinderWrapper.disableVerificationForUid();
+                Privilege.disableVerification();
                 var params = createSessionParams(!safeMode && setInstaller, full);
                 sessionId = packageInstaller.createSession(params);
             } catch (IOException | RuntimeException e) {
@@ -166,11 +170,53 @@ public class InstallRepository implements Closeable {
         }
     }
 
+    /** Root 模式：交给 su（pm install-create/write/commit）完成。 */
+    private void rootInstall(boolean setInstaller, boolean commit, boolean full,
+                             boolean removeSplit) {
+        if (zipParser == null) {
+            installPackageUri();
+            return;
+        }
+        if (!commit) {
+            installResult.postValue(new InstallFailed(apkLite, PackageInstaller.STATUS_FAILURE,
+                "Root 模式下不支持分步添加 split，请一次选择全部 APK"));
+            return;
+        }
+        if (removeSplit) {
+            installResult.postValue(new InstallFailed(apkLite, PackageInstaller.STATUS_FAILURE,
+                "Root 模式下暂不支持移除 split，需切换到 Shizuku 模式"));
+            return;
+        }
+        var installer = !safeMode && setInstaller
+            ? Privilege.installerPackageName()
+            : BuildConfig.APPLICATION_ID;
+        try {
+            RootInstaller.install(zipParser, installer, apkLite.packageName, full, stagingProgress);
+            if (closeable != null) {
+                try {
+                    closeable.close();
+                } catch (IOException ignored) {
+                }
+                closeable = null;
+            }
+            zipParser = null;
+            setStageBasedOnResult(PackageInstaller.STATUS_SUCCESS,
+                PackageManager_rename.INSTALL_SUCCEEDED, null);
+        } catch (RootInstaller.InstallException e) {
+            installResult.postValue(new InstallFailed(apkLite, PackageInstaller.STATUS_FAILURE,
+                e.reason + "\n" + e.getMessage()));
+        } catch (IOException e) {
+            Log.e(TAG, "Root install failed", e);
+            installResult.postValue(new InstallFailed(apkLite, PackageInstaller.STATUS_FAILURE,
+                e.toString()));
+        }
+    }
+
     private void commit(PackageInstaller.Session session) {
         stagingProgress.postValue(101);
         var receiver = new LocalIntentReceiver(this::setStageBasedOnResult);
         try {
-            BinderWrapper.addDeveloperVerificationExperiment(apkLite.packageName);
+            Privilege.addDeveloperVerificationExperiment(apkLite.packageName);
             // noinspection RequestInstallPackagesPolicy
             session.commit(receiver.getIntentSender());
         } catch (RuntimeException e) {
@@ -241,7 +287,7 @@ public class InstallRepository implements Closeable {
     private InstallStage processApkLite(ApkLite apk) {
         PackageInfo old;
         try {
-            old = BinderWrapper.getPackageInfo(apk.packageName, 0);
+            old = Privilege.getPackageInfo(apk.packageName, 0);
         } catch (PackageManager.NameNotFoundException ignored) {
             old = null;
         }
@@ -286,6 +332,7 @@ public class InstallRepository implements Closeable {
 
     private boolean findBaseSessionId(ApkLite apk) {
         var full = true;
+        if (Privilege.mode() != Privilege.MODE_SHIZUKU) return full;
         var allSessions = packageInstaller.getAllSessions();
         for (int i = 0, allSessionsSize = allSessions.size(); i < allSessionsSize; i++) {
             var item = allSessions.get(i);
@@ -322,7 +369,7 @@ public class InstallRepository implements Closeable {
     private InstallStage processPackageUri(String packageName) {
         PackageInfo info;
         try {
-            info = BinderWrapper.getPackageInfo(packageName, 0);
+            info = Privilege.getPackageInfo(packageName, 0);
         } catch (PackageManager.NameNotFoundException e) {
             return new InstallAborted(InstallAborted.ABORT_NOTFOUND, e.toString());
         }
@@ -341,6 +388,17 @@ public class InstallRepository implements Closeable {
 
     private void installPackageUri() {
         stagingProgress.postValue(101);
+        if (Privilege.mode() == Privilege.MODE_ROOT) {
+            var error = Privilege.installExistingPackage(apkLite.packageName);
+            if (error == null) {
+                setStageBasedOnResult(PackageInstaller.STATUS_SUCCESS,
+                    PackageManager_rename.INSTALL_SUCCEEDED, null);
+            } else {
+                setStageBasedOnResult(PackageInstaller.STATUS_FAILURE,
+                    PackageManager_rename.INSTALL_FAILED_INTERNAL_ERROR, error);
+            }
+            return;
+        }
         try {
             var pm = (PackageManager_rename) (Object) BinderWrapper.pm;
             pm.installExistingPackage(apkLite.packageName, PackageManager.INSTALL_REASON_USER);
@@ -403,16 +461,16 @@ public class InstallRepository implements Closeable {
 
     private void setStageBasedOnResult(int statusCode, int legacyStatus, String message) {
         if (statusCode == PackageInstaller.STATUS_SUCCESS) {
-            var startIntent = BinderWrapper.pm.getLaunchIntentForPackage(apkLite.packageName);
+            var startIntent = packageManager.getLaunchIntentForPackage(apkLite.packageName);
             try {
-                var info = BinderWrapper.getPackageInfo(apkLite.packageName, 0);
+                var info = Privilege.getPackageInfo(apkLite.packageName, 0);
                 apkLite.icon = info.applicationInfo.loadIcon(packageManager);
                 apkLite.label = info.applicationInfo.loadLabel(packageManager).toString();
             } catch (PackageManager.NameNotFoundException ignored) {
             }
             installResult.postValue(new InstallSuccess(apkLite, startIntent, safeMode));
         } else if (statusCode == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-            BinderWrapper.setPermissionsResult(sessionId);
+            Privilege.setPermissionsResult(sessionId);
         } else {
             if (message == null) {
                 message = PackageManager_rename.installStatusToString(legacyStatus);

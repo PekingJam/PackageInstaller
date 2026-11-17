@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Shizuku 安装器</string>
+    <string name="app_name">安装器</string>
 
     <string name="install">安装</string>
     <string name="update">更新</string>
@@ -68,4 +68,82 @@
     <string name="error_cancelled">安装已取消。</string>
 
     <string name="settings_safe_mode">安全模式禁用了部分危险功能，仅在必要时启用</string>
+
+    <!-- 主界面 -->
+    <string name="app_subtitle">通过 Root / Shizuku 实现特权安装与应用管理</string>
+    <string name="section_actions">功能</string>
+    <string name="recheck">重新检测</string>
+    <string name="grant">去授权</string>
+    <string name="back">返回</string>
+
+    <string name="status_root_ok">Root 权限已授权</string>
+    <string name="status_shizuku_ok">Shizuku 已授权</string>
+    <string name="status_none">尚未获得授权</string>
+    <string name="status_subtitle_ready">当前使用 %1$s 模式，安装与卸载可直接执行，不会弹出系统确认框。</string>
+    <string name="status_subtitle_none">静默安装、卸载应用需要 Root 或 Shizuku 其中之一。</string>
+    <string name="mode_root">Root</string>
+    <string name="mode_shizuku">Shizuku</string>
+    <string name="mode_none">未授权</string>
+
+    <string name="check_root_title">Root 权限</string>
+    <string name="check_root_ok">已授权，su 可用</string>
+    <string name="check_root_missing">未授权，点「去授权」在 Root 管理器里确认</string>
+    <string name="check_shizuku_service_title">Shizuku 服务</string>
+    <string name="check_shizuku_service_ok">运行中</string>
+    <string name="check_shizuku_service_missing">未运行，需要先启动 Shizuku</string>
+    <string name="check_shizuku_perm_title">Shizuku 授权</string>
+    <string name="check_shizuku_perm_ok">已授权</string>
+    <string name="check_shizuku_perm_missing">服务已启动但未授权给本应用</string>
+    <string name="check_install_perm_title">远程安装权限</string>
+    <string name="check_install_perm_ok">已授予</string>
+    <string name="check_install_perm_missing">Shizuku 未授予 INSTALL_PACKAGES</string>
+    <string name="btn_request">授权</string>
+    <string name="btn_open">打开</string>
+
+    <string name="action_install">安装 APK</string>
+    <string name="action_install_desc">选择本地安装包</string>
+    <string name="action_url">从链接安装</string>
+    <string name="action_url_desc">直接下载并安装</string>
+    <string name="action_apps">应用管理</string>
+    <string name="action_apps_desc">卸载 / 停用 / 清数据</string>
+    <string name="action_settings">设置</string>
+    <string name="action_settings_desc">安全模式等</string>
+
+    <!-- 应用管理 -->
+    <string name="apps_title">应用管理</string>
+    <string name="apps_search_hint">搜索应用或包名</string>
+    <string name="apps_filter_all">全部</string>
+    <string name="apps_filter_user">用户</string>
+    <string name="apps_filter_system">系统</string>
+    <string name="apps_empty">没有匹配的应用</string>
+    <string name="apps_count">共 %1$d 个应用</string>
+    <string name="apps_loading">正在读取应用列表…</string>
+    <string name="app_system_tag">系统</string>
+
+    <string name="app_action_open">打开</string>
+    <string name="app_action_disable">停用</string>
+    <string name="app_action_enable">启用</string>
+    <string name="app_action_clear">清除数据</string>
+    <string name="app_action_uninstall">卸载</string>
+    <string name="app_action_info">应用信息</string>
+    <string name="app_confirm_clear_title">清除数据？</string>
+    <string name="app_confirm_clear_message">该应用的全部数据将被删除，且无法恢复。</string>
+    <string name="app_confirm_uninstall_title">卸载应用？</string>
+    <string name="app_confirm_uninstall_message">将为当前用户卸载该应用。</string>
+    <string name="app_state_disabled">已停用</string>
+    <string name="app_state_uninstalled">当前用户已卸载</string>
+    <string name="result_failed">失败：%1$s</string>
+    <string name="no_privilege">未授权：需要 Root 或 Shizuku</string>
+
+    <string name="url_dialog_title">从链接安装</string>
+    <string name="url_dialog_hint">https://example.com/app.apk</string>
+    <string name="url_dialog_label">APK 地址</string>
+
+    <string name="error_privilege">安装应用需要 Root 或 Shizuku 授权。</string>
+    <string name="root_request_failed">Root 请求失败，请检查 Root 管理器。</string>
+    <string name="check_done">检测完成</string>
+
+
+    <string name="status_checking">正在检测授权状态…</string>
+    <string name="mode_checking">…</string>
 </resources>

@@ -1,8 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.AlertDialogActivity"
-        parent="@android:style/Theme.DeviceDefault.Light.Dialog.Alert">
-        <item name="android:windowActionBar">false</item>
-        <item name="android:windowNoTitle">true</item>
+
+    <!-- 主界面 / 应用列表 -->
+    <style name="Theme.App" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ui_surface</item>
+        <item name="android:statusBarColor">@color/ui_surface</item>
+        <item name="android:navigationBarColor">@color/ui_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:colorAccent">@color/ui_primary</item>
+        <item name="android:colorEdgeEffect">@color/ui_primary</item>
+    </style>
+
+    <!-- 安装/卸载确认等弹窗宿主：透明窗口，弹窗自己画圆角卡片 -->
+    <style name="Theme.App.Dialog" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:colorAccent">@color/ui_primary</item>
+    </style>
+
+    <style name="Theme.AlertDialogActivity" parent="Theme.App.Dialog" />
+
+    <style name="Text.Title" parent="@android:style/TextAppearance.Material.Headline">
+        <item name="android:textColor">@color/ui_on_surface</item>
+        <item name="android:textSize">28sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="Text.Section" parent="@android:style/TextAppearance.Material.Body1">
+        <item name="android:textColor">@color/ui_on_surface_variant</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.06</item>
+    </style>
+
+    <style name="Text.Body" parent="@android:style/TextAppearance.Material.Body1">
+        <item name="android:textColor">@color/ui_on_surface</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Text.Caption" parent="@android:style/TextAppearance.Material.Caption">
+        <item name="android:textColor">@color/ui_on_surface_variant</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Button.Pill" parent="Text.Body">
+        <item name="android:background">@drawable/bg_pill_primary</item>
+        <item name="android:textColor">@color/ui_on_primary</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">9dp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="Button.Pill.Tonal" parent="Button.Pill">
+        <item name="android:background">@drawable/bg_pill_tonal</item>
+        <item name="android:textColor">@color/ui_on_primary_container</item>
+    </style>
+
+    <style name="Button.Pill.Danger" parent="Button.Pill">
+        <item name="android:background">@drawable/bg_pill_danger</item>
+        <item name="android:textColor">@color/ui_error</item>
+    </style>
+
+    <style name="Button.Pill.Outline" parent="Button.Pill">
+        <item name="android:background">@drawable/bg_pill_outline</item>
+        <item name="android:textColor">@color/ui_on_surface</item>
+    </style>
+
+
+    <style name="Theme.CardDialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.5</item>
+        <item name="android:colorAccent">@color/ui_primary</item>
     </style>
 </resources>

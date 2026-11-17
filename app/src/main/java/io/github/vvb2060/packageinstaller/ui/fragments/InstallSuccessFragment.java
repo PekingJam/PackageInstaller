@@ -1,52 +1,31 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.DialogInterface;
-import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.installmodel.InstallSuccess;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class InstallSuccessFragment extends BaseDialogFragment {
 
     private final InstallSuccess mDialogData;
-    private AlertDialog mDialog;
 
     public InstallSuccessFragment(InstallSuccess dialogData) {
         super(dialogData);
         mDialogData = dialogData;
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+    protected void onBuild(CardDialog card) {
         var context = requireContext();
-        var message = context.getString(R.string.install_done);
-        mDialog = new AlertDialog.Builder(context)
-            .setTitle(mDialogData.apkLite.getLabel())
-            .setIcon(mDialogData.apkLite.getIcon())
-            .setMessage(message)
-            .setNegativeButton(R.string.done, (_, _) -> finish())
-            .setPositiveButton(R.string.launch, (_, _) -> {
+        card.icon(mDialogData.apkLite.getIcon())
+            .title(mDialogData.apkLite.getLabel())
+            .message(context.getString(R.string.install_done));
+
+        card.button(getString(R.string.done), R.style.Button_Pill_Outline, v -> finish());
+        if (mDialogData.startIntent != null) {
+            card.button(getString(R.string.launch), R.style.Button_Pill, v -> {
                 startActivitySafe(mDialogData.startIntent, mDialogData.safeMode);
                 finish();
-            })
-            .create();
-        return mDialog;
-    }
-
-    @Override
-    public void onStart() {
-        super.onStart();
-        Button launchButton = mDialog.getButton(DialogInterface.BUTTON_POSITIVE);
-        if (mDialogData.startIntent == null) {
-            launchButton.setVisibility(View.GONE);
+            });
         }
     }
 }

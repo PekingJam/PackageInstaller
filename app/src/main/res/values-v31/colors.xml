@@ -2,4 +2,9 @@
 <resources>
     <color name="ic_launcher_foreground">@android:color/system_accent1_0</color>
     <color name="ic_launcher_background">@android:color/system_accent1_600</color>
+
+    <color name="ui_primary">@android:color/system_accent1_500</color>
+    <color name="ui_primary_pressed">@android:color/system_accent1_600</color>
+    <color name="ui_primary_container">@android:color/system_accent1_100</color>
+    <color name="ui_on_primary_container">@android:color/system_accent1_900</color>
 </resources>

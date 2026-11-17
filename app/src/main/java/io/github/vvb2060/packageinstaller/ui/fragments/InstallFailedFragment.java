@@ -1,15 +1,10 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.pm.PackageInstaller;
-import android.os.Bundle;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.installmodel.InstallFailed;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class InstallFailedFragment extends BaseDialogFragment {
 
@@ -20,15 +15,12 @@ public final class InstallFailedFragment extends BaseDialogFragment {
         mDialogData = dialogData;
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        return new AlertDialog.Builder(requireContext())
-            .setTitle(mDialogData.apkLite.getLabel())
-            .setIcon(mDialogData.apkLite.getIcon())
-            .setMessage(getExplanation())
-            .setPositiveButton(R.string.done, (_, _) -> finish())
-            .create();
+    protected void onBuild(CardDialog card) {
+        card.icon(mDialogData.apkLite.getIcon())
+            .title(mDialogData.apkLite.getLabel())
+            .message(getExplanation());
+        card.button(getString(R.string.done), R.style.Button_Pill, v -> finish());
     }
 
     private String getExplanation() {
@@ -42,6 +34,8 @@ public final class InstallFailedFragment extends BaseDialogFragment {
             case PackageInstaller.STATUS_FAILURE_TIMEOUT -> R.string.install_failed_timeout;
             default -> R.string.install_failed;
         };
-        return requireContext().getString(res) + "\n\n" + mDialogData.message;
+        var message = mDialogData.message;
+        var base = requireContext().getString(res);
+        return message == null || message.isEmpty() ? base : base + "\n\n" + message;
     }
 }

@@ -1,50 +1,49 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.DialogInterface;
-import android.os.Bundle;
-import android.view.View;
+import android.content.res.ColorStateList;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.installmodel.InstallInstalling;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class InstallInstallingFragment extends BaseDialogFragment {
 
     private final InstallInstalling mDialogData;
-    private AlertDialog mDialog;
 
     public InstallInstallingFragment(InstallInstalling dialogData) {
         super(dialogData);
         mDialogData = dialogData;
     }
 
-    @NonNull
     @Override
-    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        View dialogView = getLayoutInflater().inflate(R.layout.install_content_view, null);
-        TextView textView = dialogView.requireViewById(R.id.message);
-        ProgressBar progressBar = dialogView.requireViewById(R.id.progress);
-        progressBar.setVisibility(View.VISIBLE);
-        mViewModel.getStagingProgress().observe(this, progress -> {
-            var button = mDialog.getButton(DialogInterface.BUTTON_NEGATIVE);
-            button.setEnabled(progress < 100);
-            textView.setText(progress <= 100 ? R.string.copying : R.string.installing);
-            progressBar.setIndeterminate(progress < 0 || progress > 100);
-            progressBar.setProgress(progress, true);
-        });
+    protected void onBuild(CardDialog card) {
         setCancelable(false);
-        mDialog = new AlertDialog.Builder(requireContext())
-            .setTitle(mDialogData.apkLite.getLabel())
-            .setIcon(mDialogData.apkLite.getIcon())
-            .setView(dialogView)
-            .setNegativeButton(android.R.string.cancel, (_, _) -> mViewModel.cleanup())
-            .create();
-        return mDialog;
+        var context = requireContext();
+        card.icon(mDialogData.apkLite.getIcon())
+            .title(mDialogData.apkLite.getLabel());
+
+        var progress = new ProgressBar(context, null,
+            android.R.attr.progressBarStyleHorizontal);
+        progress.setIndeterminate(true);
+        progress.setIndeterminateTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
+        progress.setProgressTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
+        card.addContent(progress);
+
+        var text = new TextView(context, null, 0, R.style.Text_Caption);
+        text.setText(R.string.copying);
+        card.addContent(text);
+
+        var cancel = card.button(getString(android.R.string.cancel), R.style.Button_Pill_Tonal,
+            v -> mViewModel.cleanup());
+
+        mViewModel.getStagingProgress().observe(this, value -> {
+            var percent = value == null ? -1 : value;
+            cancel.setEnabled(percent < 100);
+            text.setText(percent <= 100 ? R.string.copying : R.string.installing);
+            progress.setIndeterminate(percent < 0 || percent > 100);
+            if (percent >= 0 && percent <= 100) progress.setProgress(percent, true);
+        });
     }
 }
