@@ -1,5 +1,4 @@
 <resources>
-    <string name="app_name">Πρόγραμμα εγκατάστασης Shizuku</string>
 
     <string name="install">Εγκατάσταση</string>
     <string name="update">Ενημέρωση</string>

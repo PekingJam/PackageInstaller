@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Package Installer</string>
+    <string name="app_name">Minimal Installer</string>
 
     <string name="install">Install</string>
     <string name="update">Update</string>
@@ -156,4 +156,19 @@
     <string name="mode_auto">Auto</string>
     <string name="mode_switched">Backend switched, rechecking…</string>
     <string name="apps_limited_hint">The system is limiting app list access; grant Root or Shizuku to see all apps.</string>
+
+    <string name="downloading">Downloading…</string>
+    <string name="notify_channel_name">Install status</string>
+    <string name="notify_preparing">Preparing…</string>
+    <string name="notify_installing">Installing</string>
+    <string name="notify_success_title">Installed</string>
+    <string name="notify_failed_title">Install failed</string>
+    <string name="notify_failed_open">Details</string>
+    <string name="notify_failed_open_hint">Tap to see why the install failed</string>
+    <string name="notify_open">Open</string>
+    <string name="notify_close">Dismiss</string>
+    <string name="default_installer_title">Set as default installer</string>
+    <string name="default_installer_desc">Open APK files with this app by default</string>
+    <string name="default_chooser_title">Pick this app, then choose Always</string>
+    <string name="default_done">Default installer set</string>
 </resources>

@@ -2,13 +2,12 @@ package io.github.vvb2060.packageinstaller.core;
 
 import android.os.Build;
 
-import androidx.lifecycle.MutableLiveData;
-
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import io.github.vvb2060.packageinstaller.apk.ZipParser;
@@ -38,7 +37,7 @@ public final class RootInstaller {
     }
 
     public static void install(ZipParser parser, String installerPackage, String packageName,
-                               boolean full, MutableLiveData<Integer> progress)
+                               boolean full, Consumer<Integer> progress)
         throws InstallException, IOException {
         var sessionId = createSession(parser.totalSize(), installerPackage, packageName, full);
         try {

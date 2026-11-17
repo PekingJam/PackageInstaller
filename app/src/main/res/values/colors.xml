@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_foreground">#FFFFFF</color>
-    <color name="ic_launcher_background">#0099CC</color>
+    <color name="ic_launcher_background">#FFFFFFFF</color>
 
     <!-- 语义色：Android 12 以下用固定蓝，v31 起跟随系统动态取色 -->
     <color name="ui_primary">#00639B</color>

@@ -15,6 +15,7 @@ import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.ViewModelProvider;
 
 import io.github.vvb2060.packageinstaller.BuildConfig;
+import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallFailed;
 import io.github.vvb2060.packageinstaller.installmodel.InstallInstalling;
@@ -36,6 +37,10 @@ import io.github.vvb2060.packageinstaller.ui.fragments.UninstallConfirmationFrag
 import io.github.vvb2060.packageinstaller.viewmodel.InstallViewModel;
 
 public class InstallLaunch extends FragmentActivity {
+    /** 从首页「设为默认安装器」触发时带上的标记，走到这里只需要提示一句。 */
+    public static final String EXTRA_SET_DEFAULT =
+        "io.github.vvb2060.packageinstaller.SET_DEFAULT";
+
     private InstallViewModel installViewModel;
     private FragmentManager fragmentManager;
 
@@ -60,6 +65,13 @@ public class InstallLaunch extends FragmentActivity {
         });
 
         super.onCreate(savedInstanceState);
+
+        if (getIntent().getBooleanExtra(EXTRA_SET_DEFAULT, false)) {
+            android.widget.Toast.makeText(this, R.string.default_done,
+                android.widget.Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
 
         if (BuildConfig.DEBUG) {
             StrictMode.enableDefaults();

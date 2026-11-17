@@ -29,6 +29,7 @@ import io.github.vvb2060.packageinstaller.apksig.Signer;
 import io.github.vvb2060.packageinstaller.apksig.Span;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.installmodel.InstallUserAction;
+import io.github.vvb2060.packageinstaller.service.InstallService;
 import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 public final class InstallConfirmationFragment extends BaseDialogFragment {
@@ -85,19 +86,25 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
 
         card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> finish());
-        var more = card.button(getString(remove ? R.string.remove_more : R.string.add_more),
-            R.style.Button_Pill_Tonal,
-            v -> mViewModel.initiateInstall(isChecked(), false, full, remove));
         mPositiveButton = card.button(
             getString(old != null ? R.string.update : R.string.install),
             R.style.Button_Pill,
-            v -> mViewModel.initiateInstall(isChecked(), true, full, remove));
+            v -> startInstall());
         mPositiveButton.setFilterTouchesWhenObscured(true);
+    }
 
-        if (!mDialogData.apkLite.needSplit()
-            || Privilege.modeOrUnknown() == Privilege.MODE_ROOT) {
-            more.setVisibility(View.GONE);
+    /** 交给后台 Service 安装，界面可以立刻关掉。 */
+    private void startInstall() {
+        var apk = mDialogData.apkLite;
+        if (mDialogData.installExisting) {
+            runAction(() -> Privilege.installExistingPackage(apk.packageName));
+            finish();
+            return;
         }
+        var hasPath = mDialogData.sourcePath != null;
+        InstallService.start(requireContext(), mDialogData.sourcePath, mDialogData.sourceUri,
+            apk.getLabel(), isChecked(), mDialogData.fullInstall, hasPath);
+        finish();
     }
 
     private boolean isChecked() {

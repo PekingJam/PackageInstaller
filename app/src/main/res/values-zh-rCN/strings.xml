@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">安装器</string>
+    <string name="app_name">极简安装器</string>
 
     <string name="install">安装</string>
     <string name="update">更新</string>
@@ -156,4 +156,19 @@
     <string name="mode_auto">自动</string>
     <string name="mode_switched">已切换授权方式，正在重新检测…</string>
     <string name="apps_limited_hint">系统限制了应用列表访问，授权 Root 或 Shizuku 后可以看到全部应用。</string>
+
+    <string name="downloading">下载中…</string>
+    <string name="notify_channel_name">安装状态</string>
+    <string name="notify_preparing">准备安装…</string>
+    <string name="notify_installing">正在安装</string>
+    <string name="notify_success_title">安装成功</string>
+    <string name="notify_failed_title">安装失败</string>
+    <string name="notify_failed_open">查看原因</string>
+    <string name="notify_failed_open_hint">点此查看失败的具体原因</string>
+    <string name="notify_open">打开</string>
+    <string name="notify_close">关闭</string>
+    <string name="default_installer_title">设为默认安装器</string>
+    <string name="default_installer_desc">让 APK 文件默认用它打开</string>
+    <string name="default_chooser_title">选择「极简安装器」并点「始终」</string>
+    <string name="default_done">已设为默认安装器</string>
 </resources>

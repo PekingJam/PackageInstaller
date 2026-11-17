@@ -9,7 +9,6 @@ import android.content.res.XmlResourceParser;
 import android.os.Build;
 import android.util.Log;
 
-import androidx.lifecycle.MutableLiveData;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -152,8 +151,8 @@ public class ZipParser {
     }
 
     public void sessionWrite(PackageInstaller.Session session,
-                             MutableLiveData<Integer> liveData) throws IOException {
-        liveData.postValue(0);
+                             Consumer<Integer> liveData) throws IOException {
+        liveData.accept(0);
         if (installName != null) {
             long total = dataSource.size();
             var progress = new Progress(liveData, total);
@@ -185,8 +184,8 @@ public class ZipParser {
     }
 
     /** 与 sessionWrite 相同的遍历顺序，但把内容写到任意目标（Root 模式走 su 的 stdin）。 */
-    public void writeTo(EntrySink target, MutableLiveData<Integer> liveData) throws IOException {
-        liveData.postValue(0);
+    public void writeTo(EntrySink target, Consumer<Integer> liveData) throws IOException {
+        liveData.accept(0);
         if (installName != null) {
             long total = dataSource.size();
             var progress = new Progress(liveData, total);
@@ -213,7 +212,7 @@ public class ZipParser {
     }
 
     private void sessionWriteApks(PackageInstaller.Session session,
-                                  MutableLiveData<Integer> liveData) throws IOException {
+                                  Consumer<Integer> liveData) throws IOException {
         var total = apksRecords.stream()
             .mapToLong(CentralDirectoryRecord::getUncompressedSize)
             .sum();
@@ -327,12 +326,12 @@ public class ZipParser {
     }
 
     private static class Progress implements Consumer<Integer> {
-        private final MutableLiveData<Integer> liveData;
+        private final Consumer<Integer> liveData;
         private final long total;
         private int lastProgress = 0;
         private long sum = 0;
 
-        Progress(MutableLiveData<Integer> liveData, long total) {
+        Progress(Consumer<Integer> liveData, long total) {
             this.liveData = liveData;
             this.total = total;
         }
@@ -343,7 +342,7 @@ public class ZipParser {
             int progress = (int) (sum * 100 / total);
             if (progress > lastProgress) {
                 lastProgress = progress;
-                liveData.postValue(progress);
+                liveData.accept(progress);
             }
         }
     }

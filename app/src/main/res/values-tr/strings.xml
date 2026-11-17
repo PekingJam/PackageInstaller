@@ -1,5 +1,4 @@
 <resources>
-    <string name="app_name">Shizuku yükleyici</string>
 
     <string name="install">Yükle</string>
     <string name="update">Güncelle</string>

@@ -5,6 +5,7 @@ import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.util.Log;
 
@@ -20,11 +21,15 @@ import java.util.concurrent.Executors;
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.core.BinderWrapper;
 import io.github.vvb2060.packageinstaller.core.InstallRepository;
+import io.github.vvb2060.packageinstaller.core.InstallRunner;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.PreferredActivity;
+import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
+import io.github.vvb2060.packageinstaller.installmodel.InstallFailed;
 import io.github.vvb2060.packageinstaller.installmodel.InstallStage;
+import io.github.vvb2060.packageinstaller.installmodel.InstallSuccess;
 import io.github.vvb2060.packageinstaller.provider.ShizukuProvider;
 import rikka.shizuku.Shizuku;
 
@@ -33,6 +38,7 @@ public class InstallViewModel extends AndroidViewModel {
     private final Executor executor;
     private final MutableLiveData<InstallStage> installResult;
     private final MutableLiveData<Integer> stagingProgress;
+    private final MutableLiveData<DownloadProgress> downloadProgress;
     private final SharedPreferences sp;
 
     private InstallRepository repository;
@@ -43,6 +49,7 @@ public class InstallViewModel extends AndroidViewModel {
         executor = Executors.newFixedThreadPool(1);
         installResult = new MutableLiveData<>(new InstallParse());
         stagingProgress = new MutableLiveData<>(-1);
+        downloadProgress = new MutableLiveData<>();
         sp = application.getSharedPreferences(BuildConfig.APPLICATION_ID, Context.MODE_PRIVATE);
     }
 
@@ -52,6 +59,10 @@ public class InstallViewModel extends AndroidViewModel {
 
     public LiveData<Integer> getStagingProgress() {
         return stagingProgress;
+    }
+
+    public LiveData<DownloadProgress> getDownloadProgress() {
+        return downloadProgress;
     }
 
     public void preprocessIntent(Intent intent) {
@@ -92,7 +103,8 @@ public class InstallViewModel extends AndroidViewModel {
 
         var safeMode = mode != Privilege.MODE_ROOT
             && sp.getBoolean("safe_mode", needSafeMode());
-        repository = new InstallRepository(context, safeMode, installResult, stagingProgress);
+        repository = new InstallRepository(context, safeMode, installResult, stagingProgress,
+                downloadProgress);
         addCloseable(repository);
         if (cancelled) {
             repository.close();
@@ -109,7 +121,31 @@ public class InstallViewModel extends AndroidViewModel {
         }
         executor.execute(() -> {
             try {
-                repository.install(setInstaller, commit, full, removeSplit);
+                var apk = repository.getApkLite();
+                var parser = repository.getZipParser();
+                if (apk == null || parser == null) {
+                    installResult.postValue(new InstallAborted(InstallAborted.ABORT_WRITE,
+                        "缺少安装包来源"));
+                    return;
+                }
+                InstallRunner.run(getApplication(), apk, parser, setInstaller, full,
+                    new InstallRunner.Callback() {
+                        @Override
+                        public void onProgress(int percent) {
+                            stagingProgress.postValue(percent);
+                        }
+
+                        @Override
+                        public void onSuccess() {
+                            installResult.postValue(new InstallSuccess(apk, null, false));
+                        }
+
+                        @Override
+                        public void onFailure(String reason) {
+                            installResult.postValue(new InstallFailed(apk,
+                                PackageInstaller.STATUS_FAILURE, reason));
+                        }
+                    });
             } catch (Throwable e) {
                 Log.e("InstallViewModel", "install failed", e);
                 installResult.postValue(new InstallAborted(InstallAborted.ABORT_WRITE,

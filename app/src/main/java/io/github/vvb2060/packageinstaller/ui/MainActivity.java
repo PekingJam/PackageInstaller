@@ -1,11 +1,14 @@
 package io.github.vvb2060.packageinstaller.ui;
 
+import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -91,6 +94,9 @@ public class MainActivity extends FragmentActivity {
                 new Intent(this, AppListActivity.class)));
         bindCard(R.id.action_settings, R.drawable.ic_settings, R.string.action_settings,
             R.string.action_settings_desc, v -> showSettings());
+        bindCard(R.id.action_default, R.drawable.ic_check_circle,
+            R.string.default_installer_title, R.string.default_installer_desc,
+            v -> setDefaultInstaller());
 
         modeChips = new TextView[]{findViewById(R.id.mode_auto),
             findViewById(R.id.mode_root_chip), findViewById(R.id.mode_shizuku_chip)};
@@ -118,6 +124,38 @@ public class MainActivity extends FragmentActivity {
             .setText("v" + BuildConfig.VERSION_NAME + " · HyperOS Mod");
 
         showCrashReportIfAny();
+        requestNotificationPermission();
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED) return;
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 42);
+    }
+
+    /** 设为默认安装器：Shizuku 下静默设置，Root/未授权下让系统弹一次「始终」选择。 */
+    private void setDefaultInstaller() {
+        if (Privilege.modeOrUnknown() == Privilege.MODE_SHIZUKU) {
+            executor.execute(() -> {
+                Privilege.prepare();
+                main.post(() -> {
+                    if (isDestroyed()) return;
+                    Toast.makeText(this, R.string.default_done, Toast.LENGTH_LONG).show();
+                });
+            });
+            return;
+        }
+        var intent = new Intent(Intent.ACTION_VIEW)
+            .setType("application/vnd.android.package-archive")
+            .putExtra(InstallLaunch.EXTRA_SET_DEFAULT, true);
+        try {
+            startActivity(Intent.createChooser(intent,
+                getString(R.string.default_chooser_title)));
+        } catch (RuntimeException e) {
+            Toast.makeText(this, getString(R.string.result_failed, e.toString()),
+                Toast.LENGTH_LONG).show();
+        }
     }
 
     /** 上次进程被杀（多半是未捕获异常）时把栈打出来，方便远程排查。 */
