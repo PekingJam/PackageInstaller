@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
@@ -55,36 +56,46 @@ public class InstallViewModel extends AndroidViewModel {
 
     public void preprocessIntent(Intent intent) {
         executor.execute(() -> {
-            var context = getApplication();
-            var pm = context.getPackageManager();
-            Privilege.attach(context);
-            if (!Privilege.rootGranted()) {
-                ShizukuProvider.waitForBinder(context);
+            try {
+                preprocess(intent);
+            } catch (Throwable e) {
+                Log.e("InstallViewModel", "preprocess failed", e);
+                installResult.postValue(new InstallAborted(InstallAborted.ABORT_PARSE,
+                    e.toString()));
             }
-            var mode = Privilege.mode();
-            if (mode == Privilege.MODE_NONE) {
-                installResult.postValue(new InstallAborted(InstallAborted.ABORT_PRIVILEGE));
-                return;
-            }
-            if (mode == Privilege.MODE_SHIZUKU && !Privilege.shizukuCanInstall()) {
-                var packageName = rikka.shizuku.ShizukuProvider.MANAGER_APPLICATION_ID;
-                installResult.postValue(new InstallAborted(InstallAborted.ABORT_SHIZUKU,
-                    pm.getLaunchIntentForPackage(packageName)));
-                return;
-            }
-            if (cancelled) return;
-            Privilege.prepare();
-
-            var safeMode = mode != Privilege.MODE_ROOT
-                && sp.getBoolean("safe_mode", needSafeMode());
-            repository = new InstallRepository(context, safeMode, installResult, stagingProgress);
-            addCloseable(repository);
-            if (cancelled) {
-                repository.close();
-                return;
-            }
-            repository.parseUri(intent);
         });
+    }
+
+    private void preprocess(Intent intent) {
+        var context = getApplication();
+        var pm = context.getPackageManager();
+        Privilege.attach(context);
+        if (!Privilege.rootGranted()) {
+            ShizukuProvider.waitForBinder(context);
+        }
+        var mode = Privilege.mode();
+        if (mode == Privilege.MODE_NONE) {
+            installResult.postValue(new InstallAborted(InstallAborted.ABORT_PRIVILEGE));
+            return;
+        }
+        if (mode == Privilege.MODE_SHIZUKU && !Privilege.shizukuCanInstall()) {
+            var packageName = rikka.shizuku.ShizukuProvider.MANAGER_APPLICATION_ID;
+            installResult.postValue(new InstallAborted(InstallAborted.ABORT_SHIZUKU,
+                pm.getLaunchIntentForPackage(packageName)));
+            return;
+        }
+        if (cancelled) return;
+        Privilege.prepare();
+
+        var safeMode = mode != Privilege.MODE_ROOT
+            && sp.getBoolean("safe_mode", needSafeMode());
+        repository = new InstallRepository(context, safeMode, installResult, stagingProgress);
+        addCloseable(repository);
+        if (cancelled) {
+            repository.close();
+            return;
+        }
+        repository.parseUri(intent);
     }
 
     public void initiateInstall(boolean setInstaller, boolean commit,
@@ -93,9 +104,15 @@ public class InstallViewModel extends AndroidViewModel {
             installResult.setValue(new InstallAborted(InstallAborted.ABORT_WRITE));
             return;
         }
-        executor.execute(() ->
-            repository.install(setInstaller, commit, full, removeSplit)
-        );
+        executor.execute(() -> {
+            try {
+                repository.install(setInstaller, commit, full, removeSplit);
+            } catch (Throwable e) {
+                Log.e("InstallViewModel", "install failed", e);
+                installResult.postValue(new InstallAborted(InstallAborted.ABORT_WRITE,
+                    e.toString()));
+            }
+        });
     }
 
     private static boolean needSafeMode() {

@@ -237,7 +237,7 @@ public class InstallRepository implements Closeable {
             zipParser = new ZipParser(dataSource);
             parsedApk = zipParser.parse();
             dataSource.stopPersistentCache();
-        } catch (Exception e) {
+        } catch (Exception | LinkageError e) {
             Log.e(TAG, "Failed to parse APK: " + url, e);
             return new InstallAborted(InstallAborted.ABORT_PARSE, e.toString());
         }
@@ -260,7 +260,7 @@ public class InstallRepository implements Closeable {
             var dataSource = FileDataSource.asDataSource(afd);
             zipParser = new ZipParser(dataSource);
             parsedApk = zipParser.parse();
-        } catch (Exception e) {
+        } catch (Exception | LinkageError e) {
             Log.e(TAG, "Failed to parse APK: " + uri, e);
             return new InstallAborted(InstallAborted.ABORT_PARSE, e.toString());
         }

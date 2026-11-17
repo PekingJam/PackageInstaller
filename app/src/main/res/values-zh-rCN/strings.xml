@@ -146,4 +146,9 @@
 
     <string name="status_checking">正在检测授权状态…</string>
     <string name="mode_checking">…</string>
+
+    <string name="crash_title">上次运行崩溃了</string>
+    <string name="crash_copy">复制</string>
+    <string name="crash_close">关闭</string>
+    <string name="crash_copied">已复制到剪贴板</string>
 </resources>

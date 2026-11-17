@@ -11,6 +11,8 @@ import android.os.Build;
 import android.os.Process;
 import android.util.Log;
 
+import org.lsposed.hiddenapibypass.LSPass;
+
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import rikka.shizuku.Shizuku;
 
@@ -26,6 +28,15 @@ public final class Privilege {
 
     private static volatile int mode = -1;
     private static volatile Context appContext;
+
+    static {
+        // ApkAssets / XmlBlock 这些隐藏 API 在 Root 模式下不会经过 BinderWrapper 的静态块，
+        // 没有豁免会抛 NoSuchMethodError（Error），直接带走进程。
+        try {
+            LSPass.setHiddenApiExemptions("");
+        } catch (Throwable ignored) {
+        }
+    }
 
     private Privilege() {
     }

@@ -92,8 +92,10 @@ public class ZipParser {
                 if (dataSource instanceof FileDataSource file) {
                     try {
                         return getAppLiteFromFd(file.getAssetFileDescriptor());
-                    } catch (IOException e) {
-                        Log.w(TAG, "Failed to parse from file fd", e);
+                    } catch (IOException | RuntimeException | LinkageError e) {
+                        // LinkageError：隐藏 API 被拦（NoSuchMethodError 等）。不能让它冒泡，
+                        // 回退到直接读 AndroidManifest.xml 的路径。
+                        Log.w(TAG, "Failed to parse from file fd, falling back", e);
                     }
                 }
                 var xmlBytes = LocalFileRecord.getUncompressedData(

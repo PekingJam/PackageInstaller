@@ -1,6 +1,8 @@
 package io.github.vvb2060.packageinstaller.ui;
 
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.net.Uri;
@@ -24,9 +26,12 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentFactory;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import io.github.vvb2060.packageinstaller.App;
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.core.Privilege;
@@ -91,6 +96,43 @@ public class MainActivity extends FragmentActivity {
 
         ((TextView) findViewById(R.id.version_text))
             .setText("v" + BuildConfig.VERSION_NAME + " · HyperOS Mod");
+
+        showCrashReportIfAny();
+    }
+
+    /** 上次进程被杀（多半是未捕获异常）时把栈打出来，方便远程排查。 */
+    private void showCrashReportIfAny() {
+        var file = App.crashFile(this);
+        if (!file.exists()) return;
+        var text = new StringBuilder();
+        try (var reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                text.append(line).append('\n');
+            }
+        } catch (Throwable e) {
+            text.append(e);
+        }
+        if (!file.delete()) file.deleteOnExit();
+        if (text.length() == 0) return;
+        var report = text.toString();
+
+        var dialog = CardDialog.create(this);
+        currentDialog = dialog;
+        dialog.icon(R.drawable.ic_alert)
+            .title(R.string.crash_title)
+            .message(report.length() > 4000 ? report.substring(0, 4000) : report);
+        dialog.button(getString(R.string.crash_close), R.style.Button_Pill_Outline,
+            v -> dialog.dismiss());
+        dialog.button(getString(R.string.crash_copy), R.style.Button_Pill, v -> {
+            var clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("crash", report));
+                Toast.makeText(this, R.string.crash_copied, Toast.LENGTH_SHORT).show();
+            }
+            dialog.dismiss();
+        });
+        dialog.show();
     }
 
     private void setupInsets() {
