@@ -21,7 +21,7 @@ public final class SettingsFragment extends BaseDialogFragment {
     @Override
     protected void onBuild(CardDialog card) {
         var context = requireContext();
-        card.icon(R.drawable.ic_app_logo)
+        card.icon(R.mipmap.ic_app_logo)
             .title(R.string.app_name)
             .message(R.string.settings_safe_mode);
 

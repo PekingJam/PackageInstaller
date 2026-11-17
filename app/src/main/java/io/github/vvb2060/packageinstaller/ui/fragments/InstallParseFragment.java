@@ -20,7 +20,7 @@ public final class InstallParseFragment extends BaseDialogFragment {
     protected void onBuild(CardDialog card) {
         setCancelable(false);
         var context = requireContext();
-        card.icon(R.drawable.ic_app_logo)
+        card.icon(R.mipmap.ic_app_logo)
             .title(R.string.app_name);
         var message = card.messageView();
         message.setText(R.string.parsing);

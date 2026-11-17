@@ -85,7 +85,7 @@ public final class AppListSource {
         fillFromArchive(context.getPackageManager(), entry);
         if (entry.icon == null) {
             entry.icon = context.getDrawable(
-                io.github.vvb2060.packageinstaller.R.drawable.ic_app_placeholder);
+                io.github.vvb2060.packageinstaller.R.mipmap.ic_app_placeholder);
         }
     }
 

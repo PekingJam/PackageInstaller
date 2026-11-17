@@ -67,7 +67,7 @@ public class ApkLite {
         var context = io.github.vvb2060.packageinstaller.core.Privilege.context();
         if (context != null) {
             try {
-                return context.getDrawable(io.github.vvb2060.packageinstaller.R.drawable.ic_app_placeholder);
+                return context.getDrawable(io.github.vvb2060.packageinstaller.R.mipmap.ic_app_placeholder);
             } catch (RuntimeException ignored) {
             }
         }
