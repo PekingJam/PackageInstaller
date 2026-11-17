@@ -51,6 +51,7 @@ public class MainActivity extends FragmentActivity {
     private TextView statusSubtitle;
     private LinearLayout checks;
     private TextView btnPrepare;
+    private TextView[] modeChips;
     private CardDialog currentDialog;
     private boolean checking;
 
@@ -91,8 +92,27 @@ public class MainActivity extends FragmentActivity {
         bindCard(R.id.action_settings, R.drawable.ic_settings, R.string.action_settings,
             R.string.action_settings_desc, v -> showSettings());
 
+        modeChips = new TextView[]{findViewById(R.id.mode_auto),
+            findViewById(R.id.mode_root_chip), findViewById(R.id.mode_shizuku_chip)};
+        for (int i = 0; i < modeChips.length; i++) {
+            final var selected = i;
+            modeChips[i].setOnClickListener(v -> switchMode(selected));
+        }
+        updateModeChips();
+
         findViewById(R.id.btn_refresh).setOnClickListener(v -> refresh(true));
-        btnPrepare.setOnClickListener(v -> requestRoot());
+        btnPrepare.setOnClickListener(v -> {
+            if (Privilege.selectedMode() == Privilege.PREF_SHIZUKU) {
+                if (Privilege.shizukuRunning()) {
+                    Privilege.requestShizukuPermission();
+                } else {
+                    openShizuku();
+                }
+                main.postDelayed(() -> refresh(true), 1500);
+            } else {
+                requestRoot();
+            }
+        });
 
         ((TextView) findViewById(R.id.version_text))
             .setText("v" + BuildConfig.VERSION_NAME + " · HyperOS Mod");
@@ -183,17 +203,24 @@ public class MainActivity extends FragmentActivity {
         checking = true;
         executor.execute(() -> {
             int mode;
+            int selected;
             boolean root;
-            boolean running;
-            boolean granted;
-            boolean canInstall;
+            boolean running = false;
+            boolean granted = false;
+            boolean canInstall = false;
             try {
                 if (invalidate) Privilege.invalidate();
+                selected = Privilege.selectedMode();
                 mode = Privilege.mode();
                 root = mode == Privilege.MODE_ROOT;
-                running = Privilege.shizukuRunning();
-                granted = Privilege.shizukuGranted();
-                canInstall = Privilege.shizukuCanInstall();
+                // 已经在跑 Root 时不再问 Shizuku，避免两种后端同时使用
+                if (mode != Privilege.MODE_ROOT && selected != Privilege.PREF_ROOT) {
+                    running = Privilege.shizukuRunning();
+                    if (running) {
+                        granted = Privilege.shizukuGranted();
+                        if (granted) canInstall = Privilege.shizukuCanInstall();
+                    }
+                }
             } catch (Throwable e) {
                 main.post(() -> {
                     checking = false;
@@ -203,6 +230,7 @@ public class MainActivity extends FragmentActivity {
                 return;
             }
             final var resolvedMode = mode;
+            final var resolvedSelected = selected;
             final var resolvedRoot = root;
             final var resolvedRunning = running;
             final var resolvedGranted = granted;
@@ -210,13 +238,33 @@ public class MainActivity extends FragmentActivity {
             main.post(() -> {
                 checking = false;
                 if (isDestroyed()) return;
-                render(resolvedMode, resolvedRoot, resolvedRunning, resolvedGranted,
-                    resolvedCanInstall);
+                render(resolvedMode, resolvedSelected, resolvedRoot, resolvedRunning,
+                    resolvedGranted, resolvedCanInstall);
             });
         });
     }
 
-    private void render(int mode, boolean root, boolean running, boolean granted,
+    private void switchMode(int selected) {
+        Privilege.setSelectedMode(selected);
+        updateModeChips();
+        Toast.makeText(this, R.string.mode_switched, Toast.LENGTH_SHORT).show();
+        refresh(true);
+    }
+
+    private void updateModeChips() {
+        if (modeChips == null) return;
+        var selected = Privilege.selectedMode();
+        for (int i = 0; i < modeChips.length; i++) {
+            var active = i == selected;
+            modeChips[i].setBackgroundResource(active
+                ? R.drawable.bg_chip : R.drawable.bg_chip_outline);
+            modeChips[i].setTextColor(getColor(active
+                ? R.color.ui_on_primary_container
+                : R.color.ui_on_surface_variant));
+        }
+    }
+
+    private void render(int mode, int selected, boolean root, boolean running, boolean granted,
                         boolean canInstall) {
         var ready = mode != Privilege.MODE_NONE;
         statusDot.setBackgroundTintList(ColorStateList.valueOf(
@@ -238,32 +286,42 @@ public class MainActivity extends FragmentActivity {
             ? getString(R.string.status_subtitle_ready, modeText)
             : getString(R.string.status_subtitle_none));
         btnPrepare.setVisibility(ready ? View.GONE : View.VISIBLE);
+        updateModeChips();
 
         checks.removeAllViews();
-        addCheck(root, R.string.check_root_title, root
-                ? R.string.check_root_ok
-                : R.string.check_root_missing,
-            root ? 0 : R.string.btn_request, v -> requestRoot());
-
-        addCheck(running, R.string.check_shizuku_service_title, running
-                ? R.string.check_shizuku_service_ok
-                : R.string.check_shizuku_service_missing,
-            running ? 0 : R.string.btn_open, v -> openShizuku());
-
-        if (running) {
-            addCheck(granted, R.string.check_shizuku_perm_title, granted
-                    ? R.string.check_shizuku_perm_ok
-                    : R.string.check_shizuku_perm_missing,
-                granted ? 0 : R.string.btn_request, v -> {
-                    Privilege.requestShizukuPermission();
-                    main.postDelayed(() -> refresh(true), 1500);
-                });
+        if (mode == Privilege.MODE_ROOT) {
+            addCheck(true, R.string.check_root_title, R.string.check_root_ok, 0, null);
+            return;
         }
-        if (granted) {
-            addCheck(canInstall, R.string.check_install_perm_title, canInstall
-                    ? R.string.check_install_perm_ok
-                    : R.string.check_install_perm_missing,
-                0, null);
+        if (mode == Privilege.MODE_SHIZUKU) {
+            addCheck(true, R.string.check_shizuku_service_title,
+                R.string.check_shizuku_service_ok, 0, null);
+            addCheck(true, R.string.check_shizuku_perm_title,
+                R.string.check_shizuku_perm_ok, 0, null);
+            addCheck(true, R.string.check_install_perm_title,
+                R.string.check_install_perm_ok, 0, null);
+            return;
+        }
+        // 一个都没拿到：只提示当前选择需要的那个后端
+        if (selected != Privilege.PREF_SHIZUKU) {
+            addCheck(root, R.string.check_root_title,
+                root ? R.string.check_root_ok : R.string.check_root_missing,
+                root ? 0 : R.string.btn_request, v -> requestRoot());
+        }
+        if (selected != Privilege.PREF_ROOT) {
+            addCheck(running, R.string.check_shizuku_service_title,
+                running ? R.string.check_shizuku_service_ok
+                    : R.string.check_shizuku_service_missing,
+                running ? 0 : R.string.btn_open, v -> openShizuku());
+            if (running) {
+                addCheck(granted, R.string.check_shizuku_perm_title,
+                    granted ? R.string.check_shizuku_perm_ok
+                        : R.string.check_shizuku_perm_missing,
+                    granted ? 0 : R.string.btn_request, v -> {
+                        Privilege.requestShizukuPermission();
+                        main.postDelayed(() -> refresh(true), 1500);
+                    });
+            }
         }
     }
 

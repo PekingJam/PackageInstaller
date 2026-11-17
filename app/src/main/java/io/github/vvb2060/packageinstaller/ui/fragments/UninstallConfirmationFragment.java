@@ -24,6 +24,8 @@ public final class UninstallConfirmationFragment extends BaseDialogFragment {
         var apk = mDialogData.apkLite;
         var app = mDialogData.info.applicationInfo;
         var enabled = app == null || app.enabled;
+        var system = app != null
+            && (app.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0;
 
         card.icon(apk.getIcon())
             .title(apk.getLabel())
@@ -49,7 +51,8 @@ public final class UninstallConfirmationFragment extends BaseDialogFragment {
                     if (clear) {
                         Privilege.clearApplicationUserData(apk.packageName);
                     } else {
-                        Privilege.uninstall(mDialogData.info);
+                        Privilege.uninstall(apk.packageName,
+                            mDialogData.info.getLongVersionCode(), system);
                     }
                 });
                 finish();

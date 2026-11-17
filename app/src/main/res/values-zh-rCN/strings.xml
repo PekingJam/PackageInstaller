@@ -151,4 +151,9 @@
     <string name="crash_copy">复制</string>
     <string name="crash_close">关闭</string>
     <string name="crash_copied">已复制到剪贴板</string>
+
+    <string name="mode_selector_title">授权方式</string>
+    <string name="mode_auto">自动</string>
+    <string name="mode_switched">已切换授权方式，正在重新检测…</string>
+    <string name="apps_limited_hint">系统限制了应用列表访问，授权 Root 或 Shizuku 后可以看到全部应用。</string>
 </resources>

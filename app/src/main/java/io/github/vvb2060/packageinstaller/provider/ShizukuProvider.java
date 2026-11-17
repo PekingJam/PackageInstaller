@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.core.BinderWrapper;
+import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.PreferredActivity;
 import moe.shizuku.api.BinderContainer;
 import rikka.shizuku.Shizuku;
@@ -36,7 +37,13 @@ public class ShizukuProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
+        // 用户把特权方式锁定为 Root 时，这里连 Shizuku 的初始化都不做，
+        // 保证两种后端不会同时被使用。
+        if (Privilege.selectedMode() == Privilege.PREF_ROOT) {
+            return true;
+        }
         Shizuku.addBinderReceivedListener(() -> {
+            if (Privilege.modeOrUnknown() == Privilege.MODE_ROOT) return;
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
                 var context = getContext();
                 BinderWrapper.init(context);
@@ -53,6 +60,7 @@ public class ShizukuProvider extends ContentProvider {
     @Override
     public Bundle call(@NonNull String method, @Nullable String arg, @Nullable Bundle extras) {
         var reply = new Bundle();
+        if (Privilege.selectedMode() == Privilege.PREF_ROOT) return reply;
         if (Sui.isSui()) return reply;
         if (extras == null) return reply;
         if (method.equals(rikka.shizuku.ShizukuProvider.METHOD_SEND_BINDER)) {

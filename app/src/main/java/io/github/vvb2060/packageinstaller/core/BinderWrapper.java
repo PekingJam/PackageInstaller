@@ -173,9 +173,13 @@ public class BinderWrapper {
     }
 
     public static void uninstallPackage(PackageInfo info) {
+        uninstallPackage(info.packageName, info.getLongVersionCode());
+    }
+
+    public static void uninstallPackage(String packageName, long versionCode) {
         var receiver = new LocalIntentReceiver((statusCode, legacyStatus, message) ->
             Log.v(TAG, "Uninstall result: " + statusCode + ", " + legacyStatus + ", " + message));
-        var versionedPackage = new VersionedPackage(info.packageName, info.getLongVersionCode());
+        var versionedPackage = new VersionedPackage(packageName, versionCode);
         try {
             // noinspection MissingPermission NewApi WrongConstant
             installer.uninstall(versionedPackage, PackageManager_rename.DELETE_SYSTEM_APP,

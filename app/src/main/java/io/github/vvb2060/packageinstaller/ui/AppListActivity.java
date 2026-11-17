@@ -2,11 +2,7 @@ package io.github.vvb2060.packageinstaller.ui;
 
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
-import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -39,6 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 
 import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.core.AppListSource;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 
 public class AppListActivity extends FragmentActivity {
@@ -48,8 +45,8 @@ public class AppListActivity extends FragmentActivity {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final List<AppEntry> all = new ArrayList<>();
-    private final List<AppEntry> shown = new ArrayList<>();
+    private final List<AppListSource.Entry> all = new ArrayList<>();
+    private final List<AppListSource.Entry> shown = new ArrayList<>();
 
     private AppAdapter adapter;
     private ProgressBar progress;
@@ -59,29 +56,6 @@ public class AppListActivity extends FragmentActivity {
     private CardDialog currentDialog;
     private int filter = FILTER_ALL;
     private String query = "";
-
-    static final class AppEntry {
-        final PackageInfo info;
-        final String packageName;
-        final String label;
-        final String version;
-        final Drawable icon;
-        final boolean system;
-        final boolean enabled;
-        final boolean installed;
-
-        AppEntry(PackageInfo info, String label, Drawable icon) {
-            this.info = info;
-            this.packageName = info.packageName;
-            this.label = label;
-            this.version = info.versionName == null ? "" : info.versionName;
-            this.icon = icon;
-            var app = info.applicationInfo;
-            this.system = app != null && (app.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-            this.enabled = app == null || app.enabled;
-            this.installed = app != null && (app.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
-        }
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -171,39 +145,44 @@ public class AppListActivity extends FragmentActivity {
         progress.setVisibility(View.VISIBLE);
         empty.setVisibility(View.GONE);
         executor.execute(() -> {
-            var pm = getPackageManager();
-            var list = new ArrayList<AppEntry>();
-            List<PackageInfo> packages;
-            try {
-                packages = pm.getInstalledPackages(PackageManager.MATCH_UNINSTALLED_PACKAGES);
-            } catch (RuntimeException e) {
-                packages = new ArrayList<>();
-            }
-            for (var info : packages) {
-                var app = info.applicationInfo;
-                if (app == null) continue;
-                var label = app.loadLabel(pm);
-                var text = label == null ? info.packageName : label.toString();
-                Drawable drawable;
-                try {
-                    drawable = app.loadIcon(pm);
-                } catch (RuntimeException e) {
-                    drawable = null;
-                }
-                list.add(new AppEntry(info, text, drawable));
-            }
-            var collator = Collator.getInstance(Locale.CHINA);
-            list.sort((a, b) -> {
-                if (a.system != b.system) return a.system ? 1 : -1;
-                return collator.compare(a.label, b.label);
-            });
+            var list = new ArrayList<>(AppListSource.names(this));
+            sort(list);
             main.post(() -> {
                 if (isDestroyed()) return;
                 all.clear();
                 all.addAll(list);
                 progress.setVisibility(View.GONE);
                 applyFilter();
+                if (list.size() <= 3 && Privilege.mode() == Privilege.MODE_NONE) {
+                    Toast.makeText(this, R.string.apps_limited_hint, Toast.LENGTH_LONG).show();
+                }
             });
+
+            // 名称/图标要解 APK，慢慢补，凑够一批刷一次
+            var count = 0;
+            for (var entry : list) {
+                AppListSource.details(this, entry);
+                if (++count % 8 == 0) {
+                    main.post(() -> {
+                        if (!isDestroyed()) adapter.notifyDataSetChanged();
+                    });
+                }
+            }
+            sort(list);
+            main.post(() -> {
+                if (isDestroyed()) return;
+                all.clear();
+                all.addAll(list);
+                applyFilter();
+            });
+        });
+    }
+
+    private static void sort(List<AppListSource.Entry> list) {
+        var collator = Collator.getInstance(Locale.CHINA);
+        list.sort((a, b) -> {
+            if (a.system != b.system) return a.system ? 1 : -1;
+            return collator.compare(a.label, b.label);
         });
     }
 
@@ -224,12 +203,12 @@ public class AppListActivity extends FragmentActivity {
             ? View.VISIBLE : View.GONE);
     }
 
-    private void showAppDialog(AppEntry entry) {
+    private void showAppDialog(AppListSource.Entry entry) {
         var dialog = CardDialog.create(this);
         currentDialog = dialog;
 
         var subtitle = new StringBuilder(entry.packageName);
-        if (!entry.version.isEmpty()) subtitle.append(" · v").append(entry.version);
+        if (!entry.versionName.isEmpty()) subtitle.append(" · v").append(entry.versionName);
         if (entry.system) subtitle.append(" · ").append(getString(R.string.app_system_tag));
         if (!entry.enabled) subtitle.append(" · ").append(getString(R.string.app_state_disabled));
         if (!entry.installed) {
@@ -241,12 +220,11 @@ public class AppListActivity extends FragmentActivity {
             .status(subtitle.toString());
 
         var content = dialog.contentView();
-        var intent = getPackageManager().getLaunchIntentForPackage(entry.packageName);
-        if (intent != null && entry.installed && entry.enabled) {
+        if (entry.installed && entry.enabled) {
             addActionRow(content, R.drawable.ic_play, R.string.app_action_open, false,
                 v -> {
                     dialog.dismiss();
-                    openApp(entry);
+                    launchApp(entry);
                 });
         }
         addActionRow(content, R.drawable.ic_power,
@@ -291,18 +269,14 @@ public class AppListActivity extends FragmentActivity {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
-    private void openApp(AppEntry entry) {
-        var intent = getPackageManager().getLaunchIntentForPackage(entry.packageName);
-        if (intent == null) {
-            Toast.makeText(this, R.string.error_notfound, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        try {
-            startActivity(intent);
-        } catch (ActivityNotFoundException | SecurityException e) {
-            Toast.makeText(this, getString(R.string.result_failed, e.toString()),
-                Toast.LENGTH_SHORT).show();
-        }
+    private void launchApp(AppListSource.Entry entry) {
+        executor.execute(() -> {
+            var error = Privilege.launchApp(entry.packageName);
+            if (error != null) {
+                main.post(() -> Toast.makeText(this,
+                    getString(R.string.result_failed, error), Toast.LENGTH_LONG).show());
+            }
+        });
     }
 
     private void openAppInfo(String packageName) {
@@ -316,22 +290,22 @@ public class AppListActivity extends FragmentActivity {
         }
     }
 
-    private void toggleEnabled(AppEntry entry) {
+    private void toggleEnabled(AppListSource.Entry entry) {
         var enable = !entry.enabled;
         runAction(enable ? R.string.app_action_enable : R.string.app_action_disable,
             () -> Privilege.setEnabled(entry.packageName, enable));
     }
 
-    private void confirmClear(AppEntry entry) {
+    private void confirmClear(AppListSource.Entry entry) {
         confirm(R.string.app_confirm_clear_title, R.string.app_confirm_clear_message,
             R.string.app_action_clear, () -> runAction(R.string.app_action_clear,
                 () -> Privilege.clearApplicationUserData(entry.packageName)));
     }
 
-    private void confirmUninstall(AppEntry entry) {
+    private void confirmUninstall(AppListSource.Entry entry) {
         confirm(R.string.app_confirm_uninstall_title, R.string.app_confirm_uninstall_message,
             R.string.app_action_uninstall, () -> runAction(R.string.app_action_uninstall,
-                () -> Privilege.uninstall(entry.info)));
+                () -> Privilege.uninstall(entry.packageName, entry.versionCode, entry.system)));
     }
 
     private void confirm(int title, int message, int positive, Runnable onConfirm) {
@@ -359,7 +333,7 @@ public class AppListActivity extends FragmentActivity {
             String error;
             try {
                 error = operation.get();
-            } catch (RuntimeException e) {
+            } catch (RuntimeException | LinkageError e) {
                 error = e.toString();
             }
             final var result = error;
@@ -398,17 +372,21 @@ public class AppListActivity extends FragmentActivity {
                 : getLayoutInflater().inflate(R.layout.item_app, parent, false);
             var entry = shown.get(position);
             var icon = (ImageView) view.findViewById(R.id.app_icon);
-            if (entry.icon != null) icon.setImageDrawable(entry.icon);
+            if (entry.icon != null) {
+                icon.setImageDrawable(entry.icon);
+            } else {
+                icon.setImageResource(android.R.drawable.sym_def_app_icon);
+            }
             ((TextView) view.findViewById(R.id.app_label)).setText(entry.label);
             var sub = new StringBuilder(entry.packageName);
-            if (!entry.version.isEmpty()) sub.append(" · v").append(entry.version);
+            if (!entry.versionName.isEmpty()) sub.append(" · v").append(entry.versionName);
             if (!entry.installed) {
                 sub.append(" · ").append(getString(R.string.app_state_uninstalled));
             } else if (!entry.enabled) {
                 sub.append(" · ").append(getString(R.string.app_state_disabled));
             }
             ((TextView) view.findViewById(R.id.app_sub)).setText(sub);
-            // ListView 的 onItemClick 会被行自身的可点击属性吃掉，直接绑定在这里
+            // ListView 的 onItemClick 会被行自身消费，这里直接绑定
             view.setOnClickListener(v -> showAppDialog(entry));
             return view;
         }

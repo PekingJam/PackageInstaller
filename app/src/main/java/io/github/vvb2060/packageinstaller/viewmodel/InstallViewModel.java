@@ -70,7 +70,10 @@ public class InstallViewModel extends AndroidViewModel {
         var context = getApplication();
         var pm = context.getPackageManager();
         Privilege.attach(context);
-        if (!Privilege.rootGranted()) {
+        var selected = Privilege.selectedMode();
+        if (selected == Privilege.PREF_SHIZUKU) {
+            ShizukuProvider.waitForBinder(context);
+        } else if (selected == Privilege.PREF_AUTO && !Privilege.rootGranted()) {
             ShizukuProvider.waitForBinder(context);
         }
         var mode = Privilege.mode();

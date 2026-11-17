@@ -22,6 +22,7 @@ public class App extends Application {
             LSPass.setHiddenApiExemptions("");
         } catch (Throwable ignored) {
         }
+        io.github.vvb2060.packageinstaller.core.Privilege.attach(this);
 
         var previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {

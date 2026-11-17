@@ -151,4 +151,9 @@
     <string name="crash_copy">Copy</string>
     <string name="crash_close">Close</string>
     <string name="crash_copied">Copied to clipboard</string>
+
+    <string name="mode_selector_title">BACKEND</string>
+    <string name="mode_auto">Auto</string>
+    <string name="mode_switched">Backend switched, rechecking…</string>
+    <string name="apps_limited_hint">The system is limiting app list access; grant Root or Shizuku to see all apps.</string>
 </resources>

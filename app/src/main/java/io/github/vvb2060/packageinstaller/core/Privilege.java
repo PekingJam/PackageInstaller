@@ -13,18 +13,31 @@ import android.util.Log;
 
 import org.lsposed.hiddenapibypass.LSPass;
 
+import java.util.regex.Pattern;
+
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import rikka.shizuku.Shizuku;
 
 /**
- * 特权操作入口：优先 Root（su），没有 Root 时退回 Shizuku。
+ * 特权操作入口。
+ *
+ * 同一时刻只使用一种后端：一旦判定为 Root，本类不会再碰 Shizuku 的 API，反之亦然。
+ * 业务代码只能从这里调特权操作，不要直接引用 BinderWrapper / Shizuku。
  */
 public final class Privilege {
     private static final String TAG = Privilege.class.getSimpleName();
+    private static final String PREF = "privilege_mode";
 
     public static final int MODE_NONE = 0;
     public static final int MODE_ROOT = 1;
     public static final int MODE_SHIZUKU = 2;
+
+    /** 用户选择：自动 / 只用 Root / 只用 Shizuku。 */
+    public static final int PREF_AUTO = 0;
+    public static final int PREF_ROOT = 1;
+    public static final int PREF_SHIZUKU = 2;
+
+    private static final Pattern COMPONENT = Pattern.compile("([a-zA-Z][\\w.]*)/([\\w.$]+)");
 
     private static volatile int mode = -1;
     private static volatile Context appContext;
@@ -49,6 +62,24 @@ public final class Privilege {
         return appContext;
     }
 
+    // ---------------- 模式选择 ----------------
+
+    public static int selectedMode() {
+        var context = appContext;
+        if (context == null) return PREF_AUTO;
+        return context.getSharedPreferences(BuildConfig.APPLICATION_ID, Context.MODE_PRIVATE)
+            .getInt(PREF, PREF_AUTO);
+    }
+
+    public static void setSelectedMode(int value) {
+        var context = appContext;
+        if (context != null) {
+            context.getSharedPreferences(BuildConfig.APPLICATION_ID, Context.MODE_PRIVATE)
+                .edit().putInt(PREF, value).apply();
+        }
+        invalidateNow();
+    }
+
     public static int mode() {
         var current = mode;
         if (current >= 0) return current;
@@ -63,16 +94,34 @@ public final class Privilege {
         return mode;
     }
 
+    public static boolean usingRoot() {
+        return mode() == MODE_ROOT;
+    }
+
     public static void invalidate() {
         mode = -1;
         RootShell.invalidate();
     }
 
-    private static int detect() {
-        if (RootShell.isAvailable()) return MODE_ROOT;
-        if (shizukuCanInstall()) return MODE_SHIZUKU;
-        return MODE_NONE;
+    public static void invalidateNow() {
+        mode = -1;
+        RootShell.invalidateNow();
     }
+
+    private static int detect() {
+        var selected = selectedMode();
+        if (selected == PREF_ROOT) {
+            // 只用 Root：连「Shizuku 是否在跑」都不问
+            return RootShell.isAvailable() ? MODE_ROOT : MODE_NONE;
+        }
+        if (selected == PREF_SHIZUKU) {
+            return shizukuCanInstall() ? MODE_SHIZUKU : MODE_NONE;
+        }
+        if (RootShell.isAvailable()) return MODE_ROOT;
+        return shizukuCanInstall() ? MODE_SHIZUKU : MODE_NONE;
+    }
+
+    // ---------------- Shizuku 状态 ----------------
 
     public static boolean rootGranted() {
         return RootShell.isAvailable();
@@ -113,11 +162,13 @@ public final class Privilege {
         }
     }
 
+    // ---------------- 通路 ----------------
+
     public static int userId() {
         return Process.myUid() / 100_000;
     }
 
-    /** 初始化当前模式需要的 binder 代理。 */
+    /** 初始化当前模式需要的 binder 代理；Root 模式下什么也不做。 */
     public static void prepare() {
         var context = appContext;
         if (context == null) return;
@@ -190,20 +241,19 @@ public final class Privilege {
     }
 
     /** 返回 null 表示成功，否则是错误信息。 */
-    public static String uninstall(PackageInfo info) {
+    public static String uninstall(String packageName, long versionCode, boolean systemApp) {
         var current = mode();
         if (current == MODE_SHIZUKU) {
-            BinderWrapper.uninstallPackage(info);
+            BinderWrapper.uninstallPackage(packageName, versionCode);
             return null;
         }
         if (current == MODE_ROOT) {
-            var pkg = RootShell.quote(info.packageName);
+            var pkg = RootShell.quote(packageName);
             var result = RootShell.exec(RootInstaller.PM + " uninstall --user " + userId() + " " + pkg);
             if (result.succeeded()) return null;
-            // 系统应用不能按用户卸载，退而卸载更新（等价于 DELETE_SYSTEM_APP 的效果）。
-            // 故意不做不带 --user 的重试：那会把这个应用从所有用户（含工作资料/分身）里删掉。
-            var app = info.applicationInfo;
-            if (app != null && (app.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) {
+            // 系统应用不能按用户卸载，退而卸载更新（等价 DELETE_SYSTEM_APP 的效果）。
+            // 故意不做不带 --user 的重试：那会把应用从所有用户（含工作资料/分身）里删掉。
+            if (systemApp) {
                 var updates = RootShell.exec(RootInstaller.PM + " uninstall-system-updates " + pkg);
                 if (updates.ok()) return null;
             }
@@ -220,8 +270,8 @@ public final class Privilege {
         }
         if (current == MODE_ROOT) {
             var pkg = RootShell.quote(packageName);
-            var cmd = (enabled ? RootInstaller.PM + " enable --user " : RootInstaller.PM + " disable-user --user ")
-                + userId() + " " + pkg;
+            var cmd = (enabled ? RootInstaller.PM + " enable --user "
+                : RootInstaller.PM + " disable-user --user ") + userId() + " " + pkg;
             var result = RootShell.exec(cmd);
             return result.ok() ? null : result.text();
         }
@@ -266,17 +316,42 @@ public final class Privilege {
         }
     }
 
-    private static String notGranted() {
-        return "未获得 Root 或 Shizuku 授权";
+    /**
+     * 打开应用。系统限制了应用列表可见性时（MIUI「获取应用列表」关闭），自己的 PM 拿不到
+     * launch intent，这时用 Root 解析组件名再 am start。
+     */
+    public static String launchApp(String packageName) {
+        var context = appContext;
+        var intent = context.getPackageManager().getLaunchIntentForPackage(packageName);
+        if (intent != null) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+                return null;
+            } catch (RuntimeException e) {
+                Log.w(TAG, "launchApp", e);
+            }
+        }
+        if (mode() == MODE_ROOT) {
+            var resolved = RootShell.exec("/system/bin/cmd package resolve-activity --brief"
+                + " -a android.intent.action.MAIN -c android.intent.category.LAUNCHER"
+                + " --user " + userId() + " " + RootShell.quote(packageName));
+            var matcher = COMPONENT.matcher(resolved.output);
+            String component = null;
+            while (matcher.find()) {
+                component = matcher.group(0);
+            }
+            if (component != null) {
+                var start = RootShell.exec("/system/bin/am start --user " + userId()
+                    + " -n " + RootShell.quote(component));
+                return start.ok() ? null : start.text();
+            }
+            return resolved.text();
+        }
+        return notGranted();
     }
 
-    private static String join(String first, String second) {
-        var builder = new StringBuilder(first);
-        var trimmed = second.trim();
-        if (!trimmed.isEmpty() && !first.contains(trimmed)) {
-            if (builder.length() > 0) builder.append('\n');
-            builder.append(trimmed);
-        }
-        return builder.toString();
+    private static String notGranted() {
+        return "未获得 Root 或 Shizuku 授权";
     }
 }
