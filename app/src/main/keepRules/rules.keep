@@ -28,3 +28,8 @@
     <init>(android.app.Application);
 }
 -keepnames class moe.shizuku.api.BinderContainer
+
+# app_process 子进程按类名反射调用，不能被混淆/裁剪
+-keep class io.github.vvb2060.packageinstaller.core.RootEntry {
+    public static void main(java.lang.String[]);
+}

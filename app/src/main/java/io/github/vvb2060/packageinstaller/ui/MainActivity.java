@@ -134,18 +134,28 @@ public class MainActivity extends FragmentActivity {
         requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 42);
     }
 
-    /** 设为默认安装器：Shizuku 下静默设置，Root/未授权下让系统弹一次「始终」选择。 */
+    /** 设为默认安装器：Root 走 app_process 子进程静默设置，失败再退回系统选择器。 */
     private void setDefaultInstaller() {
-        if (Privilege.modeOrUnknown() == Privilege.MODE_SHIZUKU) {
-            executor.execute(() -> {
-                Privilege.prepare();
-                main.post(() -> {
-                    if (isDestroyed()) return;
-                    Toast.makeText(this, R.string.default_done, Toast.LENGTH_LONG).show();
-                });
-            });
+        if (Privilege.modeOrUnknown() == Privilege.MODE_NONE) {
+            showDefaultChooser();
             return;
         }
+        executor.execute(() -> {
+            var error = Privilege.makeDefaultInstaller();
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (error == null) {
+                    Toast.makeText(this, R.string.default_done, Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, getString(R.string.result_failed, error),
+                        Toast.LENGTH_LONG).show();
+                    showDefaultChooser();
+                }
+            });
+        });
+    }
+
+    private void showDefaultChooser() {
         var intent = new Intent(Intent.ACTION_VIEW)
             .setType("application/vnd.android.package-archive")
             .putExtra(InstallLaunch.EXTRA_SET_DEFAULT, true);

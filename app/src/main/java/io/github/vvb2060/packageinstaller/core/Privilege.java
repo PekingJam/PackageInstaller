@@ -320,6 +320,20 @@ public final class Privilege {
      * 打开应用。系统限制了应用列表可见性时（MIUI「获取应用列表」关闭），自己的 PM 拿不到
      * launch intent，这时用 Root 解析组件名再 am start。
      */
+    /** 把本应用设为 APK 的默认打开方式；返回 null 表示成功。 */
+    public static String makeDefaultInstaller() {
+        var context = appContext;
+        var current = mode();
+        if (current == MODE_ROOT) {
+            return PreferredActivity.setViaRoot(context, context.getPackageManager());
+        }
+        if (current == MODE_SHIZUKU) {
+            PreferredActivity.set(context.getPackageManager());
+            return null;
+        }
+        return notGranted();
+    }
+
     public static String launchApp(String packageName) {
         var context = appContext;
         var intent = context.getPackageManager().getLaunchIntentForPackage(packageName);

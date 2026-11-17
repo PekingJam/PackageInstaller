@@ -103,6 +103,54 @@ public class PreferredActivity {
         }
     }
 
+    private static Uri dummyUri() {
+        return new Uri.Builder()
+            .scheme(ContentResolver.SCHEME_CONTENT)
+            .authority(BuildConfig.APPLICATION_ID)
+            .path("base.apk")
+            .build();
+    }
+
+    /** 当前能处理 APK 的应用组件集合（Root 子进程只负责按这个集合写偏好）。 */
+    private static ComponentName[] matchingComponents(PackageManager pm) {
+        var intent = new Intent(Intent.ACTION_VIEW)
+            .addCategory(Intent.CATEGORY_DEFAULT)
+            .setDataAndType(dummyUri(), PACKAGE_MIME_TYPE);
+        var infos = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+        var list = new ArrayList<ComponentName>();
+        for (var info : infos) {
+            var activityInfo = info.activityInfo;
+            if (activityInfo == null) continue;
+            list.add(new ComponentName(activityInfo.packageName, activityInfo.name));
+        }
+        return list.toArray(new ComponentName[0]);
+    }
+
+    /**
+     * Root 模式：pm / cmd package 没有 add-preferred-activity，只能起一个 app_process
+     * 子进程（uid 0）直接调 IPackageManager。返回 null 表示成功。
+     */
+    public static String setViaRoot(android.content.Context context, PackageManager pm) {
+        var activity = new ComponentName(BuildConfig.APPLICATION_ID, InstallLaunch.class.getName());
+        var set = matchingComponents(pm);
+        if (set.length == 0) return "找不到可用于 APK 的应用组件";
+
+        var args = new StringBuilder();
+        args.append("default ").append(Os.getuid() / 100000).append(' ');
+        args.append(activity.flattenToString());
+        for (var component : set) {
+            args.append(' ').append(component.flattenToString());
+        }
+
+        var command = "/system/bin/app_process -Djava.class.path="
+            + RootShell.quote(context.getPackageCodePath())
+            + " /system/bin --nice-name=pi-default "
+            + RootEntry.class.getName() + " " + args;
+        var result = RootShell.exec(command, 60_000);
+        if (result.output.contains("OK")) return null;
+        return result.text();
+    }
+
     public static void set(PackageManager rawPm) {
         var pm = BinderWrapper.pm;
         if (check(pm, Intent.ACTION_VIEW) && check(pm, Intent.ACTION_INSTALL_PACKAGE)) {
