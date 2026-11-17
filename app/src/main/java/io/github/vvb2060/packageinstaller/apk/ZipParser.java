@@ -283,7 +283,7 @@ public class ZipParser {
             try (var block = new android.content.res.XmlBlock(data);
                  var parser = block.newParser()) {
                 var res = Resources.getSystem();
-                return ApkLite.fromAndroidManifest(parser, res);
+                return dropIcon(ApkLite.fromAndroidManifest(parser, res));
             } catch (XmlPullParserException | RuntimeException e) {
                 throw new IOException("Failed to parse AndroidManifest.xml", e);
             }
@@ -299,11 +299,20 @@ public class ZipParser {
                  var parser = (XmlResourceParser) newParserMethod.invoke(xmlBlockInstance)) {
                 var res = Resources.getSystem();
                 assert parser != null;
-                return ApkLite.fromAndroidManifest(parser, res);
+                return dropIcon(ApkLite.fromAndroidManifest(parser, res));
             }
         } catch (Exception e) {
             throw new IOException("Failed to parse AndroidManifest.xml", e);
         }
+    }
+
+    /**
+     * 走 XmlBlock + 系统资源解析时，拿到的 icon 要么是 null、要么是系统的默认图标
+     * （APK 自己的资源表没加载），不能当成应用图标用，交给上层显示占位图标。
+     */
+    private static ApkLite dropIcon(ApkLite apkLite) {
+        apkLite.icon = null;
+        return apkLite;
     }
 
     private static ApkLite getAppLiteFromFd(AssetFileDescriptor afd) throws IOException {
