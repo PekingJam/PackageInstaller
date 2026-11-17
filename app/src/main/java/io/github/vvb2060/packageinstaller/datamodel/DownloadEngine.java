@@ -32,7 +32,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
 
-import io.github.vvb2060.packageinstaller.core.BinderWrapper;
+import io.github.vvb2060.packageinstaller.core.Privilege;
 
 public class DownloadEngine extends Thread implements Closeable {
     private static final String TAG = DownloadEngine.class.getSimpleName();
@@ -106,7 +106,7 @@ public class DownloadEngine extends Thread implements Closeable {
     }
 
     long open(URI uri, ByteBuffer buffer) throws IOException {
-        BinderWrapper.addPowerSaveWhitelistApp();
+        Privilege.setPowerSaveWhitelist(true);
 
         if (uri.getHost() == null) {
             uri = URI.create("https://" + uri);
@@ -185,7 +185,7 @@ public class DownloadEngine extends Thread implements Closeable {
     @Override
     public void close() {
         interrupt();
-        BinderWrapper.removePowerSaveWhitelistApp();
+        Privilege.setPowerSaveWhitelist(false);
     }
 
     @Override

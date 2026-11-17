@@ -205,6 +205,7 @@ public class BinderWrapper {
     }
 
     public static void addPowerSaveWhitelistApp() {
+        if (deviceIdle == null) return;
         try {
             int userId = Os.getuid() / 100000;
             deviceIdle.addPowerSaveTempWhitelistApp(BuildConfig.APPLICATION_ID,
@@ -216,6 +217,7 @@ public class BinderWrapper {
     }
 
     public static void removePowerSaveWhitelistApp() {
+        if (deviceIdle == null) return;
         try {
             deviceIdle.removePowerSaveWhitelistApp(BuildConfig.APPLICATION_ID);
         } catch (RemoteException e) {
