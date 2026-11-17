@@ -234,12 +234,11 @@
             android:layout_marginTop="12dp" />
 
         <include
-            android:id="@+id/action_resume"
+            android:id="@+id/action_downloads"
             layout="@layout/card_action"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:visibility="gone" />
+            android:layout_marginTop="12dp" />
 
         <TextView
             android:id="@+id/version_text"

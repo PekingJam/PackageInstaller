@@ -16,6 +16,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallFailed;
 import io.github.vvb2060.packageinstaller.installmodel.InstallInstalling;
@@ -26,6 +27,7 @@ import io.github.vvb2060.packageinstaller.installmodel.InstallUserAction;
 import io.github.vvb2060.packageinstaller.installmodel.PackageUserAction;
 import io.github.vvb2060.packageinstaller.installmodel.SettingsUserAction;
 import io.github.vvb2060.packageinstaller.ui.fragments.BaseDialogFragment;
+import io.github.vvb2060.packageinstaller.ui.fragments.DownloadConfirmFragment;
 import io.github.vvb2060.packageinstaller.ui.fragments.InstallConfirmationFragment;
 import io.github.vvb2060.packageinstaller.ui.fragments.InstallErrorFragment;
 import io.github.vvb2060.packageinstaller.ui.fragments.InstallFailedFragment;
@@ -98,6 +100,7 @@ public class InstallLaunch extends FragmentActivity {
             case InstallInstalling installing -> new InstallInstallingFragment(installing);
             case InstallSuccess success -> new InstallSuccessFragment(success);
             case InstallFailed failed -> new InstallFailedFragment(failed);
+            case DownloadConfirm confirm -> new DownloadConfirmFragment(confirm);
         };
     }
 

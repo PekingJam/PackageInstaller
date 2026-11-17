@@ -25,6 +25,9 @@ import io.github.vvb2060.packageinstaller.core.InstallRunner;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.PreferredActivity;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
+import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
+import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
 import io.github.vvb2060.packageinstaller.installmodel.InstallFailed;
@@ -81,6 +84,22 @@ public class InstallViewModel extends AndroidViewModel {
         var context = getApplication();
         var pm = context.getPackageManager();
         Privilege.attach(context);
+
+        // 普通文件下载不需要特权，先分流，免得没 Root 的用户连下载都用不了
+        var url = extractUrl(intent);
+        if (url != null) {
+            var probe = probeQuietly(url);
+            if (probe != null && !probe.looksLikeApk()) {
+                if (isWebPage(probe.mime)) {
+                    installResult.postValue(new InstallAborted(InstallAborted.ABORT_PARSE,
+                        context.getString(R.string.download_not_a_file)));
+                    return;
+                }
+                installResult.postValue(new DownloadConfirm(probe.url, probe.name, probe.mime,
+                    probe.size, probe.host()));
+                return;
+            }
+        }
         var selected = Privilege.selectedMode();
         if (selected == Privilege.PREF_SHIZUKU) {
             ShizukuProvider.waitForBinder(context);
@@ -152,6 +171,34 @@ public class InstallViewModel extends AndroidViewModel {
                     e.toString()));
             }
         });
+    }
+
+    /** 从外部 Intent 里抠出 http(s) 链接；没有就返回 null。 */
+    private static String extractUrl(Intent intent) {
+        var uri = intent.getData();
+        if (uri != null) {
+            var scheme = uri.getScheme();
+            if ("http".equals(scheme) || "https".equals(scheme)) return uri.toString();
+        }
+        var text = intent.getStringExtra(Intent.EXTRA_TEXT);
+        if (text != null) {
+            text = text.trim();
+            if (text.startsWith("http://") || text.startsWith("https://")) return text;
+        }
+        return null;
+    }
+
+    private static DownloadProbe probeQuietly(String url) {
+        try {
+            return DownloadProbe.probe(url);
+        } catch (Exception e) {
+            Log.w("InstallViewModel", "probe failed: " + url, e);
+            return null;
+        }
+    }
+
+    private static boolean isWebPage(String mime) {
+        return mime != null && mime.toLowerCase(java.util.Locale.ROOT).startsWith("text/html");
     }
 
     private static boolean needSafeMode() {

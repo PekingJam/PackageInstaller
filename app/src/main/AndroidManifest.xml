@@ -54,6 +54,11 @@
             android:label="@string/apps_title" />
 
         <activity
+            android:name=".ui.DownloadsActivity"
+            android:exported="false"
+            android:label="@string/downloads_title" />
+
+        <activity
             android:name=".ui.InstallLaunch"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true"
@@ -92,6 +97,15 @@
                     android:host="details"
                     android:scheme="market" />
             </intent-filter>
+            <intent-filter android:label="@string/download_with">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
 
@@ -115,6 +129,11 @@
 
         <service
             android:name=".service.InstallService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".service.DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

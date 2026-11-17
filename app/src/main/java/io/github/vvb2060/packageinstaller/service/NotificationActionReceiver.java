@@ -13,6 +13,10 @@ public class NotificationActionReceiver extends BroadcastReceiver {
             InstallService.requestCancel();
             return;
         }
+        if (DownloadService.ACTION_CANCEL.equals(intent.getAction())) {
+            DownloadService.requestCancel();
+            return;
+        }
         var id = intent.getIntExtra(InstallService.EXTRA_NOTIFICATION_ID, 0);
         var manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null && id != 0) manager.cancel(id);

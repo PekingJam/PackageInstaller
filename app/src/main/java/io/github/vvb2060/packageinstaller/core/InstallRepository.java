@@ -29,9 +29,11 @@ import io.github.vvb2060.packageinstaller.apksig.Block;
 import io.github.vvb2060.packageinstaller.apksig.Parser;
 import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadEngine;
+import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
 import io.github.vvb2060.packageinstaller.datamodel.NetDataSource;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
+import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
 import io.github.vvb2060.packageinstaller.installmodel.InstallStage;
 import io.github.vvb2060.packageinstaller.installmodel.InstallUserAction;
@@ -129,6 +131,15 @@ public class InstallRepository implements Closeable {
      */
     private InstallStage processUrl(String url) {
         Log.v(TAG, "URL: " + url);
+        var probe = probeQuietly(url);
+        if (probe != null && probe.mime != null
+            && probe.mime.toLowerCase(java.util.Locale.ROOT).startsWith("text/html")) {
+            return new InstallAborted(InstallAborted.ABORT_PARSE, "这是一个网页链接，不是文件");
+        }
+        if (probe != null && !probe.looksLikeApk()) {
+            // 明确不是安装包（mp4/pdf/jpg…），直接走下载确认
+            return new DownloadConfirm(probe.url, probe.name, probe.mime, probe.size, probe.host());
+        }
         ApkLite parsedApk;
         try {
             var engine = new DownloadEngine(SSLContext.getDefault());
@@ -140,6 +151,11 @@ public class InstallRepository implements Closeable {
         } catch (Exception | LinkageError e) {
             if (cancelled) return new InstallAborted(InstallAborted.ABORT_CLOSE);
             Log.e(TAG, "Failed to preview: " + url, e);
+            if (probe != null) {
+                // 当成 APK 试过但解析不了（或者是普通文件），降级成下载
+                return new DownloadConfirm(probe.url, probe.name, probe.mime, probe.size,
+                    probe.host());
+            }
             return new InstallAborted(InstallAborted.ABORT_PARSE, e.toString());
         }
 
@@ -149,6 +165,15 @@ public class InstallRepository implements Closeable {
             if (name != null) parsedApk.label = name;
         }
         return stage;
+    }
+
+    private static DownloadProbe probeQuietly(String url) {
+        try {
+            return DownloadProbe.probe(url);
+        } catch (Exception e) {
+            Log.w(TAG, "probe failed: " + url, e);
+            return null;
+        }
     }
 
     private InstallStage processContentUri(Uri uri) {

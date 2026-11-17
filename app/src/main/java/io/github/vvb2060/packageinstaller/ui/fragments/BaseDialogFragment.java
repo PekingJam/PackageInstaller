@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
 public abstract sealed class BaseDialogFragment extends DialogFragment permits
     InstallConfirmationFragment, InstallErrorFragment, InstallFailedFragment,
     InstallInstallingFragment, InstallParseFragment, InstallSuccessFragment,
-    UninstallConfirmationFragment, SettingsFragment {
+    UninstallConfirmationFragment, SettingsFragment, DownloadConfirmFragment {
 
     private static final ExecutorService ACTION_EXECUTOR = Executors.newSingleThreadExecutor();
 

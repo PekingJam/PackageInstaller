@@ -31,7 +31,6 @@ import androidx.fragment.app.FragmentFactory;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,13 +39,13 @@ import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.RootShell;
-import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
-import io.github.vvb2060.packageinstaller.service.InstallService;
 import io.github.vvb2060.packageinstaller.installmodel.SettingsUserAction;
 import io.github.vvb2060.packageinstaller.ui.fragments.SettingsFragment;
 
 public class MainActivity extends FragmentActivity {
     private static final int REQUEST_APK = 1;
+    public static final String EXTRA_NEW_DOWNLOAD =
+        "io.github.vvb2060.packageinstaller.NEW_DOWNLOAD";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -59,7 +58,6 @@ public class MainActivity extends FragmentActivity {
     private TextView btnPrepare;
     private TextView[] modeChips;
     private CardDialog currentDialog;
-    private View resumeCard;
     private boolean checking;
 
     @Override
@@ -91,8 +89,11 @@ public class MainActivity extends FragmentActivity {
 
         bindCard(R.id.action_install, R.drawable.ic_install, R.string.action_install,
             R.string.action_install_desc, v -> pickApk());
-        bindCard(R.id.action_url, R.drawable.ic_globe, R.string.action_url,
-            R.string.action_url_desc, v -> showUrlDialog());
+        bindCard(R.id.action_url, R.drawable.ic_add, R.string.action_download,
+            R.string.action_download_desc, v -> showUrlDialog());
+        bindCard(R.id.action_downloads, R.drawable.ic_download,
+            R.string.downloads_card_title, R.string.downloads_card_desc,
+            v -> startActivity(new Intent(this, DownloadsActivity.class)));
         bindCard(R.id.action_apps, R.drawable.ic_apps, R.string.action_apps,
             R.string.action_apps_desc, v -> startActivity(
                 new Intent(this, AppListActivity.class)));
@@ -101,11 +102,6 @@ public class MainActivity extends FragmentActivity {
         bindCard(R.id.action_default, R.drawable.ic_check_circle,
             R.string.default_installer_title, R.string.default_installer_desc,
             v -> setDefaultInstaller());
-
-        resumeCard = findViewById(R.id.action_resume);
-        bindCard(R.id.action_resume, R.drawable.ic_refresh,
-            R.string.resume_card_title, R.string.resume_card_desc,
-            v -> showPendingDownloads());
 
         modeChips = new TextView[]{findViewById(R.id.mode_auto),
             findViewById(R.id.mode_root_chip), findViewById(R.id.mode_shizuku_chip)};
@@ -134,6 +130,9 @@ public class MainActivity extends FragmentActivity {
 
         showCrashReportIfAny();
         requestNotificationPermission();
+        if (getIntent() != null && getIntent().getBooleanExtra(EXTRA_NEW_DOWNLOAD, false)) {
+            main.postDelayed(this::showUrlDialog, 200);
+        }
     }
 
     private void requestNotificationPermission() {
@@ -232,70 +231,6 @@ public class MainActivity extends FragmentActivity {
     protected void onResume() {
         super.onResume();
         refresh(true);
-        refreshPendingDownloads();
-    }
-
-    private void refreshPendingDownloads() {
-        executor.execute(() -> {
-            var pending = ResumableDownload.pending(this);
-            main.post(() -> {
-                if (isDestroyed()) return;
-                if (pending.isEmpty()) {
-                    resumeCard.setVisibility(View.GONE);
-                } else {
-                    resumeCard.setVisibility(View.VISIBLE);
-                    ((TextView) resumeCard.findViewById(R.id.card_title)).setText(
-                        getString(R.string.resume_card_title, pending.size()));
-                }
-            });
-        });
-    }
-
-    private void showPendingDownloads() {
-        executor.execute(() -> {
-            var pending = ResumableDownload.pending(this);
-            main.post(() -> {
-                if (isDestroyed()) return;
-                if (pending.isEmpty()) {
-                    refreshPendingDownloads();
-                    return;
-                }
-                showPendingDialog(pending);
-            });
-        });
-    }
-
-    private void showPendingDialog(List<ResumableDownload.Pending> pending) {
-        var dialog = CardDialog.create(this);
-        currentDialog = dialog;
-        dialog.icon(R.drawable.ic_refresh)
-            .title(R.string.resume_title)
-            .status(getString(R.string.resume_hint));
-
-        var content = dialog.contentView();
-        for (var item : pending) {
-            var row = getLayoutInflater().inflate(R.layout.item_pending, content, false);
-            ((TextView) row.findViewById(R.id.pending_label)).setText(item.label);
-            ((TextView) row.findViewById(R.id.pending_size))
-                .setText(getString(R.string.resume_downloaded, Format.size(item.downloaded)));
-            row.findViewById(R.id.pending_resume).setOnClickListener(v -> {
-                dialog.dismiss();
-                InstallService.resume(this, item.url, item.label);
-                Toast.makeText(this, R.string.resume_started, Toast.LENGTH_SHORT).show();
-            });
-            row.findViewById(R.id.pending_delete).setOnClickListener(v -> {
-                dialog.dismiss();
-                executor.execute(() -> {
-                    ResumableDownload.delete(this, item.url);
-                    main.post(this::refreshPendingDownloads);
-                });
-            });
-            content.addView(row);
-        }
-
-        dialog.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
-            v -> dialog.dismiss());
-        dialog.show();
     }
 
     @Override
@@ -531,6 +466,17 @@ public class MainActivity extends FragmentActivity {
         var input = new EditText(this);
         input.setHint(R.string.url_dialog_hint);
         input.setSingleLine(true);
+        var clipboard = getSystemService(ClipboardManager.class);
+        if (clipboard != null && clipboard.hasPrimaryClip()) {
+            var clip = clipboard.getPrimaryClip();
+            if (clip != null && clip.getItemCount() > 0) {
+                var text = clip.getItemAt(0).coerceToText(this).toString().trim();
+                if (text.startsWith("http://") || text.startsWith("https://")) {
+                    input.setText(text);
+                    input.setSelection(text.length());
+                }
+            }
+        }
         input.setTextSize(14);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         dialog.addContent(input);
