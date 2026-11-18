@@ -36,6 +36,7 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
 
     private final InstallUserAction mDialogData;
     private CheckBox mCheckBox;
+    private CheckBox mBackgroundCheckBox;
     private TextView mPositiveButton;
     private boolean mFirstCreate;
 
@@ -66,6 +67,13 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             card.addContent(mCheckBox);
         }
 
+        mBackgroundCheckBox = new CheckBox(context);
+        mBackgroundCheckBox.setText(R.string.install_in_background);
+        mBackgroundCheckBox.setTextSize(13);
+        mBackgroundCheckBox.setButtonTintList(ColorStateList.valueOf(
+            context.getColor(R.color.ui_primary)));
+        card.addContent(mBackgroundCheckBox);
+
         var sb = new SpannableStringBuilder();
         appendBaseInfo(sb, textView);
         appendSignInfo(sb, textView);
@@ -93,7 +101,10 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
         mPositiveButton.setFilterTouchesWhenObscured(true);
     }
 
-    /** 交给后台 Service 安装，界面可以立刻关掉。 */
+    /**
+     * 默认前台安装：弹窗留在原地显示进度。
+     * 勾了「后台安装」才丢给 Service，界面立刻关掉，进度改由通知栏显示。
+     */
     private void startInstall() {
         var apk = mDialogData.apkLite;
         if (mDialogData.installExisting) {
@@ -101,10 +112,14 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             finish();
             return;
         }
-        var hasPath = mDialogData.sourcePath != null;
-        InstallService.start(requireContext(), mDialogData.sourcePath, mDialogData.sourceUri,
-            apk.getLabel(), isChecked(), mDialogData.fullInstall, hasPath);
-        finish();
+        if (mBackgroundCheckBox != null && mBackgroundCheckBox.isChecked()) {
+            var hasPath = mDialogData.sourcePath != null;
+            InstallService.start(requireContext(), mDialogData.sourcePath, mDialogData.sourceUri,
+                apk.getLabel(), isChecked(), mDialogData.fullInstall, hasPath);
+            finish();
+            return;
+        }
+        mViewModel.initiateForegroundInstall(isChecked(), mDialogData.fullInstall);
     }
 
     private boolean isChecked() {

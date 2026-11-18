@@ -1,8 +1,6 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
-import android.content.Intent;
 import android.content.res.ColorStateList;
-import android.net.Uri;
 import android.widget.CheckBox;
 
 import io.github.vvb2060.packageinstaller.R;
@@ -34,13 +32,6 @@ public final class SettingsFragment extends BaseDialogFragment {
 
         card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> finishOrDismiss());
-        card.button(getString(R.string.launch), R.style.Button_Pill_Tonal, v -> {
-            var web = Uri.parse("https://github.com/PekingJam/PackageInstaller");
-            var intent = new Intent(Intent.ACTION_VIEW, web);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivitySafe(intent, false);
-            finishOrDismiss();
-        });
         card.button(getString(android.R.string.ok), R.style.Button_Pill, v -> {
             var checked = checkBox.isChecked();
             if (checked != mDialogData.safeMode) {

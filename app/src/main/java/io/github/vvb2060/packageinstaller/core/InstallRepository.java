@@ -60,6 +60,7 @@ public class InstallRepository implements Closeable {
     private ZipParser zipParser;
     private Closeable closeable;
     private String downloadedPath;
+    private String sourceUrl;
     private volatile boolean cancelled;
 
     public InstallRepository(Context context, boolean safeMode,
@@ -140,6 +141,7 @@ public class InstallRepository implements Closeable {
      */
     private InstallStage processUrl(String url, boolean forceInstall) {
         Log.v(TAG, "URL: " + url);
+        sourceUrl = url;
         if (forceInstall) {
             return previewUrl(url, null);
         }
@@ -304,6 +306,11 @@ public class InstallRepository implements Closeable {
     }
 
     /** 安装包来源（供 Service 使用）。 */
+    /** 网络来源的地址；本地文件返回 null。 */
+    public String getSourceUrl() {
+        return sourceUrl;
+    }
+
     public ZipParser getZipParser() {
         return zipParser;
     }

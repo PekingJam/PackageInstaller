@@ -37,9 +37,11 @@ import java.util.concurrent.Executors;
 import io.github.vvb2060.packageinstaller.App;
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.core.KeepAlive;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.RootShell;
 import io.github.vvb2060.packageinstaller.installmodel.SettingsUserAction;
+import io.github.vvb2060.packageinstaller.service.KeepAliveService;
 import io.github.vvb2060.packageinstaller.ui.fragments.SettingsFragment;
 
 public class MainActivity extends FragmentActivity {
@@ -98,6 +100,9 @@ public class MainActivity extends FragmentActivity {
         bindCard(R.id.action_default, R.drawable.ic_check_circle,
             R.string.default_installer_title, R.string.default_installer_desc,
             v -> setDefaultInstaller());
+        bindCard(R.id.action_keepalive, R.drawable.ic_power,
+            R.string.keepalive_title, R.string.keepalive_desc_off,
+            v -> toggleKeepAlive());
 
         modeChips = new TextView[]{findViewById(R.id.mode_auto),
             findViewById(R.id.mode_root_chip), findViewById(R.id.mode_shizuku_chip)};
@@ -121,8 +126,10 @@ public class MainActivity extends FragmentActivity {
             }
         });
 
-        ((TextView) findViewById(R.id.version_text))
-            .setText("v" + BuildConfig.VERSION_NAME + " · HyperOS Mod");
+        var versionText = (TextView) findViewById(R.id.version_text);
+        versionText.setText(getString(R.string.footer_link, BuildConfig.VERSION_NAME));
+        versionText.setTextColor(getColor(R.color.ui_primary));
+        versionText.setOnClickListener(v -> openProjectPage());
 
         showCrashReportIfAny();
         requestNotificationPermission();
@@ -224,6 +231,7 @@ public class MainActivity extends FragmentActivity {
     protected void onResume() {
         super.onResume();
         refresh(true);
+        updateKeepAliveCard();
     }
 
     @Override
@@ -245,6 +253,33 @@ public class MainActivity extends FragmentActivity {
         ((TextView) card.findViewById(R.id.card_title)).setText(title);
         ((TextView) card.findViewById(R.id.card_desc)).setText(desc);
         card.setOnClickListener(listener);
+    }
+
+    private void toggleKeepAlive() {
+        var enabled = !KeepAlive.isEnabled(this);
+        KeepAlive.setEnabled(this, enabled);
+        if (enabled) {
+            KeepAliveService.start(this);
+            Toast.makeText(this, R.string.keepalive_on, Toast.LENGTH_SHORT).show();
+            executor.execute(() -> {
+                var root = Privilege.modeOrUnknown() == Privilege.MODE_ROOT;
+                if (!root) return;
+                KeepAlive.applyRootTweaks(this);
+                KeepAlive.startRootWatchdog(this);
+            });
+        } else {
+            KeepAliveService.stop(this);
+            Toast.makeText(this, R.string.keepalive_off, Toast.LENGTH_SHORT).show();
+            executor.execute(KeepAlive::stopRootWatchdog);
+        }
+        updateKeepAliveCard();
+    }
+
+    private void updateKeepAliveCard() {
+        var card = findViewById(R.id.action_keepalive);
+        var enabled = KeepAlive.isEnabled(this);
+        ((TextView) card.findViewById(R.id.card_desc)).setText(
+            enabled ? R.string.keepalive_desc_on : R.string.keepalive_desc_off);
     }
 
     private void refresh(boolean invalidate) {
@@ -343,12 +378,9 @@ public class MainActivity extends FragmentActivity {
             return;
         }
         if (mode == Privilege.MODE_SHIZUKU) {
-            addCheck(true, R.string.check_shizuku_service_title,
-                R.string.check_shizuku_service_ok, 0, null);
-            addCheck(true, R.string.check_shizuku_perm_title,
-                R.string.check_shizuku_perm_ok, 0, null);
-            addCheck(true, R.string.check_install_perm_title,
-                R.string.check_install_perm_ok, 0, null);
+            // 三项都通过，横排显示，别占一屏
+            addInlineChecks(new int[]{R.string.check_shizuku_service_title,
+                R.string.check_shizuku_perm_title, R.string.check_install_perm_title});
             return;
         }
         // 一个都没拿到：只提示当前选择需要的那个后端
@@ -372,6 +404,37 @@ public class MainActivity extends FragmentActivity {
                     });
             }
         }
+    }
+
+    /** 一行放三个「已就绪」标签。 */
+    private void addInlineChecks(int[] titles) {
+        var row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.setPadding(0, dp(4), 0, 0);
+        for (int i = 0; i < titles.length; i++) {
+            var chip = new TextView(this);
+            var params = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            if (i > 0) params.setMarginStart(dp(6));
+            chip.setLayoutParams(params);
+            chip.setGravity(android.view.Gravity.CENTER);
+            chip.setText(titles[i]);
+            chip.setTextSize(11.5f);
+            chip.setTextColor(getColor(R.color.ui_ok));
+            chip.setBackgroundResource(R.drawable.bg_chip_outline);
+            chip.setPadding(dp(4), dp(7), dp(4), dp(7));
+            chip.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_circle, 0, 0, 0);
+            chip.setCompoundDrawableTintList(ColorStateList.valueOf(getColor(R.color.ui_ok)));
+            chip.setCompoundDrawablePadding(dp(4));
+            row.addView(chip);
+        }
+        checks.addView(row);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void addCheck(boolean ok, int title, int desc, int action,
@@ -447,6 +510,17 @@ public class MainActivity extends FragmentActivity {
             .setDataAndType(uri, type != null ? type : "application/octet-stream")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(intent);
+    }
+
+    /** 页脚项目主页链接。 */
+    private void openProjectPage() {
+        var intent = new Intent(Intent.ACTION_VIEW,
+            Uri.parse("https://github.com/PekingJam/PackageInstaller"));
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, R.string.error_parse, Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void showSettings() {

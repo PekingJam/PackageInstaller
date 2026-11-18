@@ -105,4 +105,20 @@
     <string name="download_not_a_file">這是一個網頁連結，不是檔案</string>
     <string name="download_input_hint">貼上或輸入下載連結</string>
     <string name="download_started">已開始下載</string>
+    <string name="footer_link">極簡安裝器 v%1$s · 專案首頁</string>
+    <string name="install_in_background">背景安裝</string>
+    <string name="keepalive_title">背景常駐</string>
+    <string name="keepalive_desc_off">未開啟 · 點一下開啟開機自啟與被殺後自癒</string>
+    <string name="keepalive_desc_on">已開啟 · 開機自動執行</string>
+    <string name="keepalive_on">已開啟常駐</string>
+    <string name="keepalive_off">已關閉常駐</string>
+    <string name="keepalive_channel">背景常駐</string>
+    <string name="keepalive_notification_title">極簡安裝器正在背景執行</string>
+    <string name="keepalive_notification_text">保持下載和安裝隨時可用</string>
+    <string name="delete_task_title">刪除任務</string>
+    <string name="delete_task_only">只刪任務</string>
+    <string name="delete_task_and_file">刪任務和檔案</string>
+    <string name="delete_task_and_rest">刪任務和殘留</string>
+    <string name="delete_task_done_msg">「%1$s」已儲存在 Download 目錄，要連檔案一起刪掉嗎？</string>
+    <string name="delete_task_unfinished_msg">「%1$s」還沒下完，要連快取裡的殘留一起清掉嗎？</string>
 </resources>

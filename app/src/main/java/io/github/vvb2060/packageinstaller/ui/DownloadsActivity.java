@@ -227,7 +227,10 @@ public class DownloadsActivity extends FragmentActivity {
             // 结构没变（还在下载中），只就地更新进度文字，不重建视图
             for (var task : tasks) {
                 var row = rowsById.get(task.id);
-                if (row != null) ((TextView) row.findViewById(R.id.download_meta)).setText(metaOf(task));
+                if (row == null) continue;
+                ((TextView) row.findViewById(R.id.download_meta)).setText(metaOf(task));
+                applyProgress((android.widget.ProgressBar) row.findViewById(R.id.download_progress),
+                    task);
             }
             return;
         }
@@ -311,6 +314,7 @@ public class DownloadsActivity extends FragmentActivity {
         ((TextView) row.findViewById(R.id.download_name)).setText(task.name);
 
         ((TextView) row.findViewById(R.id.download_meta)).setText(metaOf(task));
+        applyProgress((android.widget.ProgressBar) row.findViewById(R.id.download_progress), task);
         rowsById.put(task.id, row);
 
         var primary = (TextView) row.findViewById(R.id.download_primary);
@@ -326,13 +330,79 @@ public class DownloadsActivity extends FragmentActivity {
         } else if (DownloadTask.STATE_DONE.equals(task.state)) {
             primary.setText(R.string.download_open);
             primary.setOnClickListener(v -> openFile(task));
-            deleteButton.setOnClickListener(v -> delete(task));
+            deleteButton.setOnClickListener(v -> confirmDelete(task));
         } else {
             primary.setText(R.string.resume_action);
             primary.setOnClickListener(v -> resume(task));
-            deleteButton.setOnClickListener(v -> delete(task));
+            deleteButton.setOnClickListener(v -> confirmDelete(task));
         }
         container.addView(row);
+    }
+
+    private void applyProgress(android.widget.ProgressBar progress, DownloadTask task) {
+        if (progress == null) return;
+        var state = bucket(task, System.currentTimeMillis());
+        if (state == BUCKET_DONE) {
+            progress.setVisibility(View.GONE);
+            return;
+        }
+        progress.setVisibility(View.VISIBLE);
+        if (task.size > 0) {
+            progress.setIndeterminate(false);
+            progress.setProgress((int) Math.min(100, task.downloaded * 100 / task.size));
+        } else {
+            progress.setIndeterminate(state == BUCKET_ACTIVE);
+            progress.setProgress(0);
+        }
+    }
+
+    /** 删除前问一句：只删记录，还是连文件一起删。 */
+    private void confirmDelete(DownloadTask task) {
+        var done = bucket(task, System.currentTimeMillis()) == BUCKET_DONE;
+        var dialog = CardDialog.create(this);
+        dialog.icon(R.drawable.ic_trash)
+            .title(R.string.delete_task_title)
+            .message(getString(done ? R.string.delete_task_done_msg
+                : R.string.delete_task_unfinished_msg, task.name));
+        dialog.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
+            v -> dialog.dismiss());
+        dialog.button(getString(R.string.delete_task_only), R.style.Button_Pill_Tonal, v -> {
+            dialog.dismiss();
+            deleteRecord(task);
+        });
+        dialog.button(getString(done ? R.string.delete_task_and_file : R.string.delete_task_and_rest),
+            R.style.Button_Pill_Danger, v -> {
+            dialog.dismiss();
+            deleteWithFile(task, done);
+        });
+        dialog.show();
+    }
+
+    private void deleteRecord(DownloadTask task) {
+        executor.execute(() -> {
+            if (!DownloadTask.STATE_DONE.equals(task.state)) {
+                ResumableDownload.delete(this, task.url);
+            }
+            DownloadTask.remove(this, task.id);
+            main.post(this::reload);
+        });
+    }
+
+    private void deleteWithFile(DownloadTask task, boolean done) {
+        executor.execute(() -> {
+            if (done) {
+                if (task.target != null) {
+                    try {
+                        getContentResolver().delete(android.net.Uri.parse(task.target), null, null);
+                    } catch (RuntimeException ignored) {
+                    }
+                }
+            } else {
+                ResumableDownload.delete(this, task.url);
+            }
+            DownloadTask.remove(this, task.id);
+            main.post(this::reload);
+        });
     }
 
     private String metaOf(DownloadTask task) {
@@ -391,17 +461,6 @@ public class DownloadsActivity extends FragmentActivity {
         } catch (ActivityNotFoundException | SecurityException e) {
             toast(R.string.download_open_failed);
         }
-    }
-
-    private void delete(DownloadTask task) {
-        executor.execute(() -> {
-            // 只删缓存里的残留和记录；已经保存进 Download 的文件留给用户自己处理
-            if (!DownloadTask.STATE_DONE.equals(task.state)) {
-                ResumableDownload.delete(this, task.url);
-            }
-            DownloadTask.remove(this, task.id);
-            main.post(this::reload);
-        });
     }
 
     private void toast(int resId) {

@@ -222,4 +222,20 @@
     <string name="download_not_a_file">这是一个网页链接，不是文件</string>
     <string name="download_input_hint">粘贴或输入下载链接</string>
     <string name="download_started">已开始下载</string>
+    <string name="footer_link">极简安装器 v%1$s · 项目主页</string>
+    <string name="install_in_background">后台安装</string>
+    <string name="keepalive_title">后台保活</string>
+    <string name="keepalive_desc_off">未开启 · 点一下开启开机自启与被杀后自愈</string>
+    <string name="keepalive_desc_on">已开启 · 开机自动运行</string>
+    <string name="keepalive_on">已开启保活</string>
+    <string name="keepalive_off">已关闭保活</string>
+    <string name="keepalive_channel">后台保活</string>
+    <string name="keepalive_notification_title">极简安装器正在后台运行</string>
+    <string name="keepalive_notification_text">保持下载和安装随时可用</string>
+    <string name="delete_task_title">删除任务</string>
+    <string name="delete_task_only">只删任务</string>
+    <string name="delete_task_and_file">删任务和文件</string>
+    <string name="delete_task_and_rest">删任务和残留</string>
+    <string name="delete_task_done_msg">「%1$s」已保存在 Download 目录，要连文件一起删掉吗？</string>
+    <string name="delete_task_unfinished_msg">「%1$s」还没下完，要连缓存里的残留一起清掉吗？</string>
 </resources>

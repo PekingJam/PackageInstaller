@@ -222,4 +222,20 @@
     <string name="download_not_a_file">This link is a web page, not a file</string>
     <string name="download_input_hint">Paste or type a download link</string>
     <string name="download_started">Download started</string>
+    <string name="footer_link">Minimal Installer v%1$s · Project page</string>
+    <string name="install_in_background">Install in background</string>
+    <string name="keepalive_title">Keep running</string>
+    <string name="keepalive_desc_off">Off · tap to enable boot start and auto-revive</string>
+    <string name="keepalive_desc_on">On · starts at boot</string>
+    <string name="keepalive_on">Keep-alive enabled</string>
+    <string name="keepalive_off">Keep-alive disabled</string>
+    <string name="keepalive_channel">Keep-alive</string>
+    <string name="keepalive_notification_title">Minimal Installer is running</string>
+    <string name="keepalive_notification_text">Keeps downloads and installs available</string>
+    <string name="delete_task_title">Delete task</string>
+    <string name="delete_task_only">Task only</string>
+    <string name="delete_task_and_file">Task and file</string>
+    <string name="delete_task_and_rest">Task and leftovers</string>
+    <string name="delete_task_done_msg">&quot;%1$s&quot; is saved in the Download folder. Delete the file too?</string>
+    <string name="delete_task_unfinished_msg">&quot;%1$s&quot; is unfinished. Clear the cached leftovers too?</string>
 </resources>

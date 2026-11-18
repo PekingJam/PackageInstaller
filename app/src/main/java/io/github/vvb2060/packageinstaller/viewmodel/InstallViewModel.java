@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -26,10 +27,17 @@ import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.PreferredActivity;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
 import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.apk.ApkLite;
+import io.github.vvb2060.packageinstaller.apk.ZipParser;
+import io.github.vvb2060.packageinstaller.core.InstallRunner;
+import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
+import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
 import io.github.vvb2060.packageinstaller.datamodel.Urls;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
+import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
+import io.github.vvb2060.packageinstaller.installmodel.InstallInstalling;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
 import io.github.vvb2060.packageinstaller.installmodel.InstallFailed;
 import io.github.vvb2060.packageinstaller.installmodel.InstallStage;
@@ -198,6 +206,72 @@ public class InstallViewModel extends AndroidViewModel {
 
     private static boolean isWebPage(String mime) {
         return mime != null && mime.toLowerCase(java.util.Locale.ROOT).startsWith("text/html");
+    }
+
+    /**
+     * 前台安装：留在弹窗里显示进度。网络来源先把包完整下载下来（带进度），再从文件安装；
+     * 本地来源直接写安装会话。
+     */
+    public void initiateForegroundInstall(boolean setInstaller, boolean full) {
+        if (cancelled) {
+            installResult.setValue(new InstallAborted(InstallAborted.ABORT_WRITE));
+            return;
+        }
+        executor.execute(() -> {
+            try {
+                var apk = repository.getApkLite();
+                var parser = repository.getZipParser();
+                if (apk == null || parser == null) {
+                    installResult.postValue(new InstallAborted(InstallAborted.ABORT_WRITE,
+                        "缺少安装包来源"));
+                    return;
+                }
+                installResult.postValue(new InstallInstalling(apk));
+                var url = repository.getSourceUrl();
+                if (url != null) {
+                    var file = ResumableDownload.download(getApplication(), url,
+                        (downloaded, total, speed) -> downloadProgress.postValue(
+                            new DownloadProgress(downloaded, total, speed)),
+                        () -> cancelled);
+                    try (var pfd = ParcelFileDescriptor.open(file,
+                        ParcelFileDescriptor.MODE_READ_ONLY)) {
+                        var fileParser = new ZipParser(FileDataSource.asDataSource(pfd));
+                        var fileApk = fileParser.parse();
+                        installResult.postValue(new InstallInstalling(fileApk));
+                        runInstall(fileApk, fileParser, setInstaller, full);
+                    } finally {
+                        //noinspection ResultOfMethodCallIgnored
+                        file.delete();
+                    }
+                    return;
+                }
+                runInstall(apk, parser, setInstaller, full);
+            } catch (Throwable e) {
+                Log.e("InstallViewModel", "foreground install failed", e);
+                installResult.postValue(new InstallAborted(InstallAborted.ABORT_WRITE, e.toString()));
+            }
+        });
+    }
+
+    private void runInstall(ApkLite apk, ZipParser parser, boolean setInstaller, boolean full) {
+        InstallRunner.run(getApplication(), apk, parser, setInstaller, full,
+            new InstallRunner.Callback() {
+                @Override
+                public void onProgress(int percent) {
+                    stagingProgress.postValue(percent);
+                }
+
+                @Override
+                public void onSuccess() {
+                    installResult.postValue(new InstallSuccess(apk, null, false));
+                }
+
+                @Override
+                public void onFailure(String reason) {
+                    installResult.postValue(new InstallFailed(apk,
+                        PackageInstaller.STATUS_FAILURE, reason));
+                }
+            });
     }
 
     private static boolean needSafeMode() {

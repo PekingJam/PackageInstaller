@@ -38,6 +38,19 @@ public final class InstallInstallingFragment extends BaseDialogFragment {
         var cancel = card.button(getString(android.R.string.cancel), R.style.Button_Pill_Tonal,
             v -> mViewModel.cleanup());
 
+        mViewModel.getDownloadProgress().observe(this, value -> {
+            if (value == null) return;
+            var staging = mViewModel.getStagingProgress().getValue();
+            if (staging != null && staging > 0) return;   // 已经在写会话了，交给下面那段
+            var percent = value.percent();
+            progress.setIndeterminate(percent < 0);
+            if (percent >= 0) progress.setProgress(percent, true);
+            text.setText(io.github.vvb2060.packageinstaller.ui.Format.size(value.downloaded)
+                + (value.total > 0
+                    ? " / " + io.github.vvb2060.packageinstaller.ui.Format.size(value.total) : "")
+                + " · " + io.github.vvb2060.packageinstaller.ui.Format.speed(value.speed));
+        });
+
         mViewModel.getStagingProgress().observe(this, value -> {
             var percent = value == null ? -1 : value;
             cancel.setEnabled(percent < 100);
