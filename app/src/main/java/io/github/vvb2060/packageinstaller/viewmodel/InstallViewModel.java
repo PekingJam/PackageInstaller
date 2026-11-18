@@ -32,6 +32,7 @@ import io.github.vvb2060.packageinstaller.apk.ZipParser;
 import io.github.vvb2060.packageinstaller.core.InstallRunner;
 import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
 import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
+import io.github.vvb2060.packageinstaller.service.InstallService;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
 import io.github.vvb2060.packageinstaller.datamodel.Urls;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
@@ -212,6 +213,17 @@ public class InstallViewModel extends AndroidViewModel {
      * 前台安装：留在弹窗里显示进度。网络来源先把包完整下载下来（带进度），再从文件安装；
      * 本地来源直接写安装会话。
      */
+    private volatile boolean handoff;
+
+    /**
+     * 前台下载安装途中「转后台」：让前台循环自行退出（.part 保留），
+     * 再由 InstallService 续传安装。不能直接起 Service —— 两个线程写同一个
+     * .part 会把文件写坏，所以必须先停前台再交接。
+     */
+    public void moveToBackground() {
+        handoff = true;
+    }
+
     public void initiateForegroundInstall(boolean setInstaller, boolean full) {
         if (cancelled) {
             installResult.setValue(new InstallAborted(InstallAborted.ABORT_WRITE));
@@ -226,18 +238,18 @@ public class InstallViewModel extends AndroidViewModel {
                         "缺少安装包来源"));
                     return;
                 }
-                installResult.postValue(new InstallInstalling(apk));
+                installResult.postValue(new InstallInstalling(apk, repository.getSourceUrl() != null));
                 var url = repository.getSourceUrl();
                 if (url != null) {
                     var file = ResumableDownload.download(getApplication(), url,
                         (downloaded, total, speed) -> downloadProgress.postValue(
                             new DownloadProgress(downloaded, total, speed)),
-                        () -> cancelled);
+                        () -> cancelled || handoff);
                     try (var pfd = ParcelFileDescriptor.open(file,
                         ParcelFileDescriptor.MODE_READ_ONLY)) {
                         var fileParser = new ZipParser(FileDataSource.asDataSource(pfd));
                         var fileApk = fileParser.parse();
-                        installResult.postValue(new InstallInstalling(fileApk));
+                        installResult.postValue(new InstallInstalling(fileApk, false));
                         runInstall(fileApk, fileParser, setInstaller, full);
                     } finally {
                         //noinspection ResultOfMethodCallIgnored
@@ -247,6 +259,16 @@ public class InstallViewModel extends AndroidViewModel {
                 }
                 runInstall(apk, parser, setInstaller, full);
             } catch (Throwable e) {
+                if (handoff) {
+                    // 用户点了「转后台」：前台已经退出，交给 Service 续传 + 安装
+                    Log.i("InstallViewModel", "handoff to background service");
+                    var url2 = repository == null ? null : repository.getSourceUrl();
+                    var label = repository == null || repository.getApkLite() == null
+                        ? null : repository.getApkLite().getLabel();
+                    InstallService.start(getApplication(), null, url2, label,
+                        setInstaller, full, true);
+                    return;
+                }
                 Log.e("InstallViewModel", "foreground install failed", e);
                 installResult.postValue(new InstallAborted(InstallAborted.ABORT_WRITE, e.toString()));
             }

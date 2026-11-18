@@ -244,4 +244,13 @@
     <string name="default_cleared">Restored the system default</string>
     <string name="download_need_link">Clipboard has no link</string>
     <string name="installing_percent">Installing… %1$d%%</string>
+    <string name="check_update">Check for updates</string>
+    <string name="checking_update">Checking for updates…</string>
+    <string name="update_latest">You are on the latest version</string>
+    <string name="update_available_title">New version %1$s (%2$d)</string>
+    <string name="update_no_notes">Bug fixes and improvements</string>
+    <string name="update_now">Upgrade</string>
+    <string name="update_started">Downloading the new version, install will follow</string>
+    <string name="update_failed">Update check failed: %1$s</string>
+    <string name="move_to_background">Run in background</string>
 </resources>

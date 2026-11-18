@@ -244,4 +244,13 @@
     <string name="default_cleared">已恢复系统默认</string>
     <string name="download_need_link">剪贴板里没有链接</string>
     <string name="installing_percent">正在安装… %1$d%%</string>
+    <string name="check_update">检查更新</string>
+    <string name="checking_update">正在检查更新…</string>
+    <string name="update_latest">已是最新版本</string>
+    <string name="update_available_title">发现新版本 %1$s（%2$d）</string>
+    <string name="update_no_notes">修复与改进</string>
+    <string name="update_now">升级</string>
+    <string name="update_started">已开始下载新版本，下完自动安装</string>
+    <string name="update_failed">检查更新失败：%1$s</string>
+    <string name="move_to_background">转后台</string>
 </resources>

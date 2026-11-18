@@ -127,4 +127,13 @@
     <string name="default_cleared">已恢復系統預設</string>
     <string name="download_need_link">剪貼簿裡沒有連結</string>
     <string name="installing_percent">正在安裝… %1$d%%</string>
+    <string name="check_update">檢查更新</string>
+    <string name="checking_update">正在檢查更新…</string>
+    <string name="update_latest">已是最新版本</string>
+    <string name="update_available_title">發現新版本 %1$s（%2$d）</string>
+    <string name="update_no_notes">修正與改進</string>
+    <string name="update_now">升級</string>
+    <string name="update_started">已開始下載新版本，下載完自動安裝</string>
+    <string name="update_failed">檢查更新失敗：%1$s</string>
+    <string name="move_to_background">轉背景</string>
 </resources>

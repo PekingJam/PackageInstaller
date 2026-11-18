@@ -37,6 +37,15 @@ public final class InstallInstallingFragment extends BaseDialogFragment {
 
         var cancel = card.button(getString(android.R.string.cancel), R.style.Button_Pill_Tonal,
             v -> mViewModel.cleanup());
+        android.widget.TextView backgroundButton = null;
+        if (mDialogData.fromNetwork) {
+            backgroundButton = card.button(getString(R.string.move_to_background),
+                R.style.Button_Pill_Outline, v -> {
+                    mViewModel.moveToBackground();
+                    finish();
+                });
+        }
+        final var moveButton = backgroundButton;
 
         mViewModel.getDownloadProgress().observe(this, value -> {
             if (value == null) return;
@@ -55,6 +64,11 @@ public final class InstallInstallingFragment extends BaseDialogFragment {
         mViewModel.getStagingProgress().observe(this, value -> {
             var percent = value == null ? -1 : value;
             cancel.setEnabled(percent < 100);
+            // 已经开始写安装会话，再转后台没有意义了
+            if (moveButton != null) {
+                moveButton.setVisibility(percent > 0 ? android.view.View.GONE
+                    : android.view.View.VISIBLE);
+            }
             // 写安装会话和真正安装对用户来说是同一件事，统一显示「正在安装」
             text.setText(percent >= 0 && percent <= 100
                 ? getString(R.string.installing_percent, percent)

@@ -237,5 +237,20 @@
             android:layout_marginTop="28dp"
             android:gravity="center"
             android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/check_update"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_pill_outline"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingTop="9dp"
+            android:paddingBottom="9dp"
+            android:text="@string/check_update"
+            android:textColor="@color/ui_primary"
+            android:textSize="12sp" />
     </LinearLayout>
 </ScrollView>

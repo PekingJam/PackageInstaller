@@ -39,7 +39,9 @@ import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.RootShell;
+import io.github.vvb2060.packageinstaller.core.UpdateChecker;
 import io.github.vvb2060.packageinstaller.installmodel.SettingsUserAction;
+import io.github.vvb2060.packageinstaller.service.InstallService;
 import io.github.vvb2060.packageinstaller.ui.fragments.SettingsFragment;
 
 public class MainActivity extends FragmentActivity {
@@ -122,6 +124,7 @@ public class MainActivity extends FragmentActivity {
         versionText.setText(getString(R.string.footer_link, BuildConfig.VERSION_NAME));
         versionText.setTextColor(getColor(R.color.ui_primary));
         versionText.setOnClickListener(v -> openProjectPage());
+        findViewById(R.id.check_update).setOnClickListener(v -> checkUpdate());
 
         showCrashReportIfAny();
         requestNotificationPermission();
@@ -440,6 +443,59 @@ public class MainActivity extends FragmentActivity {
             .setDataAndType(uri, type != null ? type : "application/octet-stream")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(intent);
+    }
+
+    /** 页脚「检查更新」：有新版就弹升级确认。 */
+    private void checkUpdate() {
+        Toast.makeText(this, R.string.checking_update, Toast.LENGTH_SHORT).show();
+        executor.execute(() -> {
+            UpdateChecker.Release release;
+            String error = null;
+            try {
+                release = UpdateChecker.check();
+            } catch (Throwable e) {
+                release = null;
+                error = e.toString();
+            }
+            final var result = release;
+            final var failure = error;
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (failure != null) {
+                    Toast.makeText(this, getString(R.string.update_failed, failure),
+                        Toast.LENGTH_LONG).show();
+                    return;
+                }
+                if (result == null) {
+                    Toast.makeText(this, R.string.update_latest, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showUpdateDialog(result);
+            });
+        });
+    }
+
+    private void showUpdateDialog(UpdateChecker.Release release) {
+        if (currentDialog != null) currentDialog.dismiss();
+        var dialog = CardDialog.create(this);
+        currentDialog = dialog;
+        dialog.icon(R.mipmap.ic_app_logo)
+            .title(getString(R.string.update_available_title,
+                release.versionName, release.versionCode))
+            .message(release.notes.isEmpty() ? getString(R.string.update_no_notes) : release.notes);
+        dialog.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
+            v -> dialog.dismiss());
+        dialog.button(getString(R.string.update_now), R.style.Button_Pill, v -> {
+            dialog.dismiss();
+            if (release.url.isEmpty()) {
+                Toast.makeText(this, R.string.update_failed, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            InstallService.start(this, null, release.url, "PackageInstaller-" + release.versionName
+                + ".apk", true, true, true);
+            Toast.makeText(this, R.string.update_started, Toast.LENGTH_LONG).show();
+        });
+        dialog.show();
     }
 
     /** 页脚项目主页链接。 */
