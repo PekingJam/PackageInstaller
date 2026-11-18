@@ -124,4 +124,6 @@
     <string name="default_chooser_failed">打不開系統選擇器</string>
     <string name="download_and_install">下載並安裝</string>
     <string name="download_install_hint">預覽失敗，將先完整下載 %1$s 再安裝</string>
+    <string name="default_cleared">已恢復系統預設</string>
+    <string name="download_need_link">剪貼簿裡沒有連結</string>
 </resources>

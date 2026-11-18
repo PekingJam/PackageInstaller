@@ -151,6 +151,35 @@ public class PreferredActivity {
         return result.text();
     }
 
+    /** 当前是不是本应用在接 APK 的默认打开方式。 */
+    public static boolean isDefaultInstaller(android.content.Context context) {
+        try {
+            var intent = new Intent(Intent.ACTION_VIEW)
+                .addCategory(Intent.CATEGORY_DEFAULT)
+                .setDataAndType(dummyUri(), PACKAGE_MIME_TYPE);
+            var info = context.getPackageManager()
+                .resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY);
+            return info != null && info.activityInfo != null
+                && BuildConfig.APPLICATION_ID.equals(info.activityInfo.packageName);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 取消默认：清掉本应用的优先活动映射就能回到系统原来的处理方式。
+     * clearPackagePreferredActivities 对自身包是公开可用的，不需要特权。
+     */
+    public static String clearDefault(android.content.Context context) {
+        try {
+            context.getPackageManager()
+                .clearPackagePreferredActivities(BuildConfig.APPLICATION_ID);
+            return null;
+        } catch (RuntimeException e) {
+            return e.toString();
+        }
+    }
+
     public static void set(PackageManager rawPm) {
         var pm = BinderWrapper.pm;
         if (check(pm, Intent.ACTION_VIEW) && check(pm, Intent.ACTION_INSTALL_PACKAGE)) {

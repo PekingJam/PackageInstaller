@@ -241,4 +241,6 @@
     <string name="default_chooser_failed">Could not open the system chooser</string>
     <string name="download_and_install">Download and install</string>
     <string name="download_install_hint">Preview failed, will download %1$s then install</string>
+    <string name="default_cleared">Restored the system default</string>
+    <string name="download_need_link">Clipboard has no link</string>
 </resources>

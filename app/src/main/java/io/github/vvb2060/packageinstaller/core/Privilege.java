@@ -321,6 +321,18 @@ public final class Privilege {
      * launch intent，这时用 Root 解析组件名再 am start。
      */
     /** 把本应用设为 APK 的默认打开方式；返回 null 表示成功。 */
+    /** 取消默认安装器设置，回到系统原来的行为。 */
+    public static String clearDefaultInstaller() {
+        var context = appContext;
+        if (context == null) return "没有上下文";
+        return PreferredActivity.clearDefault(context);
+    }
+
+    public static boolean isDefaultInstaller() {
+        var context = appContext;
+        return context != null && PreferredActivity.isDefaultInstaller(context);
+    }
+
     public static String makeDefaultInstaller() {
         var context = appContext;
         var current = mode();

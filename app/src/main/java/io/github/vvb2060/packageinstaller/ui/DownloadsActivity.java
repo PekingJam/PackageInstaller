@@ -91,13 +91,34 @@ public class DownloadsActivity extends FragmentActivity {
         if (isLink(text) && input.getText().length() == 0) input.setText(text);
     }
 
+    /** 剪贴板里的第一段 http(s) 链接，没有就返回 null。 */
+    private String clipboardLink() {
+        var clipboard = getSystemService(ClipboardManager.class);
+        if (clipboard == null || !clipboard.hasPrimaryClip()) return null;
+        var clip = clipboard.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) return null;
+        var text = clip.getItemAt(0).coerceToText(this).toString();
+        var url = io.github.vvb2060.packageinstaller.datamodel.Urls.first(text);
+        if (url != null) return url;
+        var trimmed = text.trim();
+        return isLink(trimmed) ? trimmed : null;
+    }
+
     private static boolean isLink(String text) {
         return text.startsWith("http://") || text.startsWith("https://");
     }
 
     private void submit() {
         var url = input.getText().toString().trim();
-        if (url.isEmpty()) return;
+        if (url.isEmpty()) {
+            // 输入框空着就直接用剪贴板里的链接，省一步粘贴
+            url = clipboardLink();
+            if (url == null) {
+                toast(R.string.download_need_link);
+                return;
+            }
+            input.setText(url);
+        }
         if (!isLink(url)) {
             toast(R.string.error_parse);
             return;
@@ -107,13 +128,14 @@ public class DownloadsActivity extends FragmentActivity {
         var imm = getSystemService(InputMethodManager.class);
         if (imm != null) imm.hideSoftInputFromWindow(input.getWindowToken(), 0);
 
+        final var target = url;
         executor.execute(() -> {
             DownloadProbe probe;
             try {
-                probe = DownloadProbe.probe(url);
+                probe = DownloadProbe.probe(target);
             } catch (Exception e) {
                 // 探测失败也允许下，文件名退化成 URL 最后一段
-                probe = DownloadProbe.guess(url);
+                probe = DownloadProbe.guess(target);
             }
             final var result = probe;
             main.post(() -> {
@@ -124,7 +146,7 @@ public class DownloadsActivity extends FragmentActivity {
                     startActivity(new Intent(this, InstallLaunch.class)
                         .setAction(Intent.ACTION_SEND)
                         .setType("text/plain")
-                        .putExtra(Intent.EXTRA_TEXT, url));
+                        .putExtra(Intent.EXTRA_TEXT, target));
                     input.setText("");
                     return;
                 }

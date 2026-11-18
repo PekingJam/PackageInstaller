@@ -5,7 +5,6 @@ import android.content.res.ColorStateList;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.CheckBox;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import io.github.vvb2060.packageinstaller.R;
@@ -47,17 +46,12 @@ public final class SettingsFragment extends BaseDialogFragment {
         keepAliveBox.setChecked(KeepAlive.isEnabled(context));
         card.addContent(keepAliveBox);
 
-        var setDefault = new TextView(context);
-        setDefault.setText(R.string.default_installer_title);
-        setDefault.setTextSize(13);
-        setDefault.setTextColor(context.getColor(R.color.ui_primary));
-        setDefault.setPadding(0, dp(12), 0, dp(4));
-        setDefault.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_check_circle, 0, 0, 0);
-        setDefault.setCompoundDrawableTintList(ColorStateList.valueOf(
-            context.getColor(R.color.ui_primary)));
-        setDefault.setCompoundDrawablePadding(dp(8));
-        setDefault.setOnClickListener(v -> setDefaultInstaller());
-        card.addContent(setDefault);
+        var defaultBox = new CheckBox(context);
+        defaultBox.setText(R.string.default_installer_title);
+        defaultBox.setTextSize(13);
+        defaultBox.setButtonTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
+        defaultBox.setChecked(Privilege.isDefaultInstaller());
+        card.addContent(defaultBox);
 
         card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> finishOrDismiss());
@@ -66,6 +60,7 @@ public final class SettingsFragment extends BaseDialogFragment {
                 mViewModel.setSafeMode(safeModeBox.isChecked());
             }
             applyKeepAlive(keepAliveBox.isChecked());
+            applyDefaultInstaller(defaultBox.isChecked());
             finishOrDismiss();
         });
     }
@@ -89,8 +84,15 @@ public final class SettingsFragment extends BaseDialogFragment {
         });
     }
 
-    /** 直接静默设置；没有特权时退回系统选择器。 */
-    private void setDefaultInstaller() {
+    /** 勾上就设为默认（需要特权），取消勾选就清掉偏好回到系统默认。 */
+    private void applyDefaultInstaller(boolean enabled) {
+        if (enabled == Privilege.isDefaultInstaller()) return;
+        if (!enabled) {
+            var error = Privilege.clearDefaultInstaller();
+            toast(error == null ? R.string.default_cleared
+                : R.string.default_chooser_failed);
+            return;
+        }
         if (Privilege.modeOrUnknown() == Privilege.MODE_NONE) {
             showChooser();
             return;
