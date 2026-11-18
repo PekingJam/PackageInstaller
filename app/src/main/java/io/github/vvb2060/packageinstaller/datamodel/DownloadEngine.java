@@ -1,6 +1,7 @@
 package io.github.vvb2060.packageinstaller.datamodel;
 
 import android.net.TrafficStats;
+import android.os.Build;
 import android.util.ArraySet;
 import android.util.Log;
 import android.webkit.URLUtil;
@@ -171,10 +172,11 @@ public class DownloadEngine extends Thread implements Closeable {
             engine.setUseClientMode(true);
             var params = engine.getSSLParameters();
             params.setEndpointIdentificationAlgorithm("HTTPS");
+            // 只跑 HTTP/1.1：不声明 ALPN 时服务器可能协商成 h2，之后按 1.1 发请求会协议错
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                params.setApplicationProtocols(new String[]{"http/1.1"});
+            }
             engine.setSSLParameters(params);
-            // 不做 TLS 会话恢复：本引擎是多连接并发 + 多 IP，复用会话在
-            // BoringSSL 上会抛 ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT
-            engine.setEnableSessionCreation(false);
             engine.beginHandshake();
         }
         var slot = new ChannelSlot(channel, engine);

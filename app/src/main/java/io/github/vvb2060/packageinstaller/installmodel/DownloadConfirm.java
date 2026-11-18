@@ -7,13 +7,21 @@ public final class DownloadConfirm extends InstallStage {
     public final String mime;
     public final long size;
     public final String host;
+    /** true 表示装包预览失败，下载完成后直接安装。 */
+    public final boolean install;
 
     public DownloadConfirm(String url, String name, String mime, long size, String host) {
+        this(url, name, mime, size, host, false);
+    }
+
+    public DownloadConfirm(String url, String name, String mime, long size, String host,
+                           boolean install) {
         super(STAGE_DOWNLOAD_CONFIRM);
         this.url = url;
         this.name = name;
         this.mime = mime;
         this.size = size;
         this.host = host;
+        this.install = install;
     }
 }

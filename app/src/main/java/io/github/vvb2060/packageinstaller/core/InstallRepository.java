@@ -181,7 +181,11 @@ public class InstallRepository implements Closeable {
                 return new DownloadConfirm(fallback.url, fallback.name, fallback.mime,
                     fallback.size, fallback.host());
             }
-            return new InstallAborted(InstallAborted.ABORT_PARSE, e.toString());
+            // 是安装包但预览失败（TLS 协商异常、服务器不支持 Range 等）：
+            // 不用纯报错卡死用户，改成「先完整下载再安装」
+            Log.w(TAG, "preview failed, fallback to download+install");
+            return new DownloadConfirm(fallback.url, fallback.name, fallback.mime,
+                fallback.size, fallback.host(), true);
         }
 
         var stage = processApkLite(parsedApk, null, url);

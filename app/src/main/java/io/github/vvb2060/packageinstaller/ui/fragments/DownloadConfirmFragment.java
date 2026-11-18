@@ -6,6 +6,7 @@ import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadStore;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.service.DownloadService;
+import io.github.vvb2060.packageinstaller.service.InstallService;
 import io.github.vvb2060.packageinstaller.ui.CardDialog;
 import io.github.vvb2060.packageinstaller.ui.Format;
 
@@ -32,14 +33,21 @@ public final class DownloadConfirmFragment extends BaseDialogFragment {
         if (!mData.host.isEmpty()) {
             sb.append(getString(R.string.download_field_host, mData.host)).append('\n');
         }
-        sb.append(getString(R.string.download_field_path,
-            DownloadStore.displayPath(mData.name)));
+        sb.append(getString(mData.install ? R.string.download_install_hint
+            : R.string.download_field_path,
+            mData.install ? mData.name : DownloadStore.displayPath(mData.name)));
         textView.setText(sb.toString());
 
         card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> finishOrDismiss());
-        card.button(getString(R.string.download_start), R.style.Button_Pill, v -> {
-            DownloadService.start(requireContext(), mData.url, mData.name, mData.mime, mData.size);
+        card.button(getString(mData.install ? R.string.download_and_install
+            : R.string.download_start), R.style.Button_Pill, v -> {
+            if (mData.install) {
+                InstallService.start(requireContext(), null, mData.url, mData.name, true, true, true);
+            } else {
+                DownloadService.start(requireContext(), mData.url, mData.name, mData.mime,
+                    mData.size);
+            }
             finish();
         });
     }
