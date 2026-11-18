@@ -244,7 +244,7 @@ public class InstallService extends Service {
             text.append(detail);
         }
         var builder = new Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.mipmap.ic_notification)
             .setContentTitle(title)
             .setContentText(text.toString())
             .setOnlyAlertOnce(true)
@@ -267,7 +267,7 @@ public class InstallService extends Service {
         manager.cancel(PROGRESS_ID);
 
         var builder = new Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.mipmap.ic_notification)
             .setContentTitle(getString(R.string.notify_success_title))
             .setContentText(label)
             .setAutoCancel(true);
@@ -300,7 +300,7 @@ public class InstallService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         var builder = new Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.mipmap.ic_notification)
             .setContentTitle(getString(R.string.notify_failed_title))
             .setContentText(label)
             .setStyle(new Notification.BigTextStyle().bigText(
