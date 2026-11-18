@@ -126,4 +126,5 @@
     <string name="download_install_hint">預覽失敗，將先完整下載 %1$s 再安裝</string>
     <string name="default_cleared">已恢復系統預設</string>
     <string name="download_need_link">剪貼簿裡沒有連結</string>
+    <string name="installing_percent">正在安裝… %1$d%%</string>
 </resources>

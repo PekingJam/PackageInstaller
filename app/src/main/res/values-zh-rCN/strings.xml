@@ -243,4 +243,5 @@
     <string name="download_install_hint">预览失败，将先完整下载 %1$s 再安装</string>
     <string name="default_cleared">已恢复系统默认</string>
     <string name="download_need_link">剪贴板里没有链接</string>
+    <string name="installing_percent">正在安装… %1$d%%</string>
 </resources>

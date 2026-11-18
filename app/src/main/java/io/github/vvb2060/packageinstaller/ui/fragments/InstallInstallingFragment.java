@@ -32,7 +32,7 @@ public final class InstallInstallingFragment extends BaseDialogFragment {
         card.addContent(progress);
 
         var text = new TextView(context, null, 0, R.style.Text_Caption);
-        text.setText(R.string.copying);
+        text.setText(R.string.installing);
         card.addContent(text);
 
         var cancel = card.button(getString(android.R.string.cancel), R.style.Button_Pill_Tonal,
@@ -45,7 +45,8 @@ public final class InstallInstallingFragment extends BaseDialogFragment {
             var percent = value.percent();
             progress.setIndeterminate(percent < 0);
             if (percent >= 0) progress.setProgress(percent, true);
-            text.setText(io.github.vvb2060.packageinstaller.ui.Format.size(value.downloaded)
+            text.setText(getString(R.string.notify_downloading) + " "
+                + io.github.vvb2060.packageinstaller.ui.Format.size(value.downloaded)
                 + (value.total > 0
                     ? " / " + io.github.vvb2060.packageinstaller.ui.Format.size(value.total) : "")
                 + " · " + io.github.vvb2060.packageinstaller.ui.Format.speed(value.speed));
@@ -54,7 +55,10 @@ public final class InstallInstallingFragment extends BaseDialogFragment {
         mViewModel.getStagingProgress().observe(this, value -> {
             var percent = value == null ? -1 : value;
             cancel.setEnabled(percent < 100);
-            text.setText(percent <= 100 ? R.string.copying : R.string.installing);
+            // 写安装会话和真正安装对用户来说是同一件事，统一显示「正在安装」
+            text.setText(percent >= 0 && percent <= 100
+                ? getString(R.string.installing_percent, percent)
+                : getString(R.string.installing));
             progress.setIndeterminate(percent < 0 || percent > 100);
             if (percent >= 0 && percent <= 100) progress.setProgress(percent, true);
         });

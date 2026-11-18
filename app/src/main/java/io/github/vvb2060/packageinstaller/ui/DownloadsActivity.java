@@ -435,6 +435,13 @@ public class DownloadsActivity extends FragmentActivity {
         } else if (DownloadTask.STATE_FAILED.equals(task.state)) {
             meta.append(getString(R.string.downloads_state_failed));
             if (task.error != null) meta.append(" · ").append(task.error);
+        } else if (bucket(task, System.currentTimeMillis()) == BUCKET_ACTIVE) {
+            meta.append(getString(R.string.notify_downloading)).append(" · ")
+                .append(Format.size(task.downloaded));
+            if (task.size > 0) {
+                meta.append(" / ").append(Format.size(task.size))
+                    .append(" · ").append((int) (task.downloaded * 100 / task.size)).append('%');
+            }
         } else {
             meta.append(Format.size(task.downloaded));
             if (task.size > 0) {
