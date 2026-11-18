@@ -220,4 +220,6 @@
     <string name="notify_download_saved">已保存到 %1$s</string>
     <string name="notify_download_failed_title">下载失败</string>
     <string name="download_not_a_file">这是一个网页链接，不是文件</string>
+    <string name="download_input_hint">粘贴或输入下载链接</string>
+    <string name="download_started">已开始下载</string>
 </resources>

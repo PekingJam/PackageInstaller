@@ -103,4 +103,6 @@
     <string name="notify_download_saved">已儲存到 %1$s</string>
     <string name="notify_download_failed_title">下載失敗</string>
     <string name="download_not_a_file">這是一個網頁連結，不是檔案</string>
+    <string name="download_input_hint">貼上或輸入下載連結</string>
+    <string name="download_started">已開始下載</string>
 </resources>

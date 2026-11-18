@@ -44,8 +44,6 @@ import io.github.vvb2060.packageinstaller.ui.fragments.SettingsFragment;
 
 public class MainActivity extends FragmentActivity {
     private static final int REQUEST_APK = 1;
-    public static final String EXTRA_NEW_DOWNLOAD =
-        "io.github.vvb2060.packageinstaller.NEW_DOWNLOAD";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -89,8 +87,6 @@ public class MainActivity extends FragmentActivity {
 
         bindCard(R.id.action_install, R.drawable.ic_install, R.string.action_install,
             R.string.action_install_desc, v -> pickApk());
-        bindCard(R.id.action_url, R.drawable.ic_add, R.string.action_download,
-            R.string.action_download_desc, v -> showUrlDialog());
         bindCard(R.id.action_downloads, R.drawable.ic_download,
             R.string.downloads_card_title, R.string.downloads_card_desc,
             v -> startActivity(new Intent(this, DownloadsActivity.class)));
@@ -130,9 +126,6 @@ public class MainActivity extends FragmentActivity {
 
         showCrashReportIfAny();
         requestNotificationPermission();
-        if (getIntent() != null && getIntent().getBooleanExtra(EXTRA_NEW_DOWNLOAD, false)) {
-            main.postDelayed(this::showUrlDialog, 200);
-        }
     }
 
     private void requestNotificationPermission() {
@@ -454,55 +447,6 @@ public class MainActivity extends FragmentActivity {
             .setDataAndType(uri, type != null ? type : "application/octet-stream")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(intent);
-    }
-
-    private void showUrlDialog() {
-        var dialog = CardDialog.create(this);
-        currentDialog = dialog;
-        dialog.icon(R.drawable.ic_globe)
-            .title(R.string.url_dialog_title)
-            .message(R.string.url_dialog_label);
-
-        var input = new EditText(this);
-        input.setHint(R.string.url_dialog_hint);
-        input.setSingleLine(true);
-        var clipboard = getSystemService(ClipboardManager.class);
-        if (clipboard != null && clipboard.hasPrimaryClip()) {
-            var clip = clipboard.getPrimaryClip();
-            if (clip != null && clip.getItemCount() > 0) {
-                var text = clip.getItemAt(0).coerceToText(this).toString().trim();
-                if (text.startsWith("http://") || text.startsWith("https://")) {
-                    input.setText(text);
-                    input.setSelection(text.length());
-                }
-            }
-        }
-        input.setTextSize(14);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        dialog.addContent(input);
-
-        dialog.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
-            v -> dialog.dismiss());
-        dialog.button(getString(android.R.string.ok), R.style.Button_Pill, v -> {
-            var url = input.getText().toString().trim();
-            dialog.dismiss();
-            if (url.isEmpty()) return;
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                Toast.makeText(this, R.string.error_parse, Toast.LENGTH_SHORT).show();
-                return;
-            }
-            startActivity(new Intent(this, InstallLaunch.class)
-                .setAction(Intent.ACTION_SEND)
-                .setType("text/plain")
-                .putExtra(Intent.EXTRA_TEXT, url));
-        });
-        var window = dialog.dialog().getWindow();
-        if (window != null) {
-            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
-                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        }
-        dialog.show();
-        input.post(input::requestFocus);
     }
 
     private void showSettings() {

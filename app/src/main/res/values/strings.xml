@@ -220,4 +220,6 @@
     <string name="notify_download_saved">Saved to %1$s</string>
     <string name="notify_download_failed_title">Download failed</string>
     <string name="download_not_a_file">This link is a web page, not a file</string>
+    <string name="download_input_hint">Paste or type a download link</string>
+    <string name="download_started">Download started</string>
 </resources>
