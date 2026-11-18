@@ -40,16 +40,26 @@ public final class DownloadConfirmFragment extends BaseDialogFragment {
 
         card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> finishOrDismiss());
-        card.button(getString(mData.install ? R.string.download_and_install
-            : R.string.download_start), R.style.Button_Pill, v -> {
-            if (mData.install) {
-                InstallService.start(requireContext(), null, mData.url, mData.name, true, true, true);
-            } else {
+        if (mData.install) {
+            // 是安装包但预览失败：给「仅下载」留个出口，别逼用户只能装
+            card.button(getString(R.string.download_only), R.style.Button_Pill_Tonal,
+                v -> {
+                    DownloadService.start(requireContext(), mData.url, mData.name, mData.mime,
+                        mData.size);
+                    finish();
+                });
+            card.button(getString(R.string.download_and_install), R.style.Button_Pill, v -> {
+                InstallService.start(requireContext(), null, mData.url, mData.name, true, true,
+                    true);
+                finish();
+            });
+        } else {
+            card.button(getString(R.string.download_start), R.style.Button_Pill, v -> {
                 DownloadService.start(requireContext(), mData.url, mData.name, mData.mime,
                     mData.size);
-            }
-            finish();
-        });
+                finish();
+            });
+        }
     }
 
     private String typeLabel(String mime) {

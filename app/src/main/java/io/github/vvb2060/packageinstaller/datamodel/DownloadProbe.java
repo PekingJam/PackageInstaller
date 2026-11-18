@@ -29,19 +29,19 @@ public final class DownloadProbe {
     }
 
     /**
-     * 是否明确是安装包：按后缀/类型判断。
-     * 拿不准（无后缀、octet-stream）时按普通文件处理，避免把普通下载误塞进安装流程。
+     * 是否明确是安装包：只认 APK 系后缀（.apk/.apks/.xapk/.apkm）或 package-archive 类型。
+     * 普通 .zip / octet-stream / 无后缀一律按普通文件处理 —— 压缩包解不出 manifest，
+     * 让它进安装流程只会得到一个「下载并安装」的假承诺。
      */
     public boolean clearlyApk() {
-        var lower = name.toLowerCase(Locale.ROOT);
+        var lower = name == null ? "" : name.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".apk") || lower.endsWith(".apks") || lower.endsWith(".xapk")
-            || lower.endsWith(".apkm") || lower.endsWith(".zip")) {
+            || lower.endsWith(".apkm")) {
             return true;
         }
-        if (mime != null) {
-            var m = mime.toLowerCase(Locale.ROOT);
-            if (m.contains("android.package-archive")) return true;
-            if (m.contains("zip")) return true;
+        if (mime != null
+            && mime.toLowerCase(Locale.ROOT).contains("android.package-archive")) {
+            return true;
         }
         return false;
     }

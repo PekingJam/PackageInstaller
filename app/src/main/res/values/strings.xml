@@ -236,6 +236,7 @@
     <string name="delete_task_no_file_msg">&quot;%1$s&quot; has no local file left, so only the record is removed.</string>
     <string name="delete_task_unfinished_msg">&quot;%1$s&quot; is unfinished. Clear the cached leftovers too?</string>
     <string name="default_chooser_failed">Could not open the system chooser</string>
+    <string name="download_only">Download only</string>
     <string name="download_and_install">Download and install</string>
     <string name="download_install_hint">Preview failed, will download %1$s then install</string>
     <string name="default_cleared">Restored the system default</string>

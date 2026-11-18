@@ -236,6 +236,7 @@
     <string name="delete_task_no_file_msg">「%1$s」没有留下本地文件，删除只会移除这条记录。</string>
     <string name="delete_task_unfinished_msg">「%1$s」还没下完，要连缓存里的残留一起清掉吗？</string>
     <string name="default_chooser_failed">打不开系统选择器</string>
+    <string name="download_only">仅下载</string>
     <string name="download_and_install">下载并安装</string>
     <string name="download_install_hint">预览失败，将先完整下载 %1$s 再安装</string>
     <string name="default_cleared">已恢复系统默认</string>
