@@ -109,6 +109,20 @@ public class DownloadService extends Service {
         }
         if (name == null || name.isEmpty()) name = DownloadProbe.guess(url).name;
         if (mime == null || mime.isEmpty()) mime = DownloadProbe.mimeFromName(name);
+        if (size <= 0) {
+            // 确认弹窗阶段没探到信息（有的站点禁 HEAD），下载前再试一次，顺便拿到真实文件名
+            try {
+                var better = DownloadProbe.probe(url);
+                if (better != null) {
+                    if (better.name != null && !better.name.isEmpty()) name = better.name;
+                    if (mime.isEmpty() || "application/octet-stream".equals(mime)) {
+                        mime = better.mime;
+                    }
+                    if (better.size > 0) size = better.size;
+                }
+            } catch (Exception ignored) {
+            }
+        }
 
         var id = DownloadTask.idOf(url);
         var task = new DownloadTask(id, url, name, mime, DownloadTask.STATE_ACTIVE);

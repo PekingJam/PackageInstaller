@@ -27,6 +27,7 @@ import io.github.vvb2060.packageinstaller.core.PreferredActivity;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
 import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
+import io.github.vvb2060.packageinstaller.datamodel.Urls;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallParse;
@@ -88,8 +89,10 @@ public class InstallViewModel extends AndroidViewModel {
         // 普通文件下载不需要特权，先分流，免得没 Root 的用户连下载都用不了
         var url = extractUrl(intent);
         if (url != null) {
+            // 探测失败（很多站点禁 HEAD）就按后缀猜，保证 APK 和其他文件一定能分开
             var probe = probeQuietly(url);
-            if (probe != null && !probe.looksLikeApk()) {
+            if (probe == null) probe = DownloadProbe.guess(url);
+            if (!probe.clearlyApk()) {
                 if (isWebPage(probe.mime)) {
                     installResult.postValue(new InstallAborted(InstallAborted.ABORT_PARSE,
                         context.getString(R.string.download_not_a_file)));
@@ -180,12 +183,8 @@ public class InstallViewModel extends AndroidViewModel {
             var scheme = uri.getScheme();
             if ("http".equals(scheme) || "https".equals(scheme)) return uri.toString();
         }
-        var text = intent.getStringExtra(Intent.EXTRA_TEXT);
-        if (text != null) {
-            text = text.trim();
-            if (text.startsWith("http://") || text.startsWith("https://")) return text;
-        }
-        return null;
+        // 分享过来的往往是「标题 + 链接」甚至一段话，取里面第一段链接
+        return Urls.first(intent.getStringExtra(Intent.EXTRA_TEXT));
     }
 
     private static DownloadProbe probeQuietly(String url) {

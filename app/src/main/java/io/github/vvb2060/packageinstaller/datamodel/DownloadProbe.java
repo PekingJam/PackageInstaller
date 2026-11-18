@@ -28,8 +28,11 @@ public final class DownloadProbe {
         this.ranged = ranged;
     }
 
-    /** APK / 拆分包 / 压缩包交给安装流程，其余当普通文件下载。 */
-    public boolean looksLikeApk() {
+    /**
+     * 是否明确是安装包：按后缀/类型判断。
+     * 拿不准（无后缀、octet-stream）时按普通文件处理，避免把普通下载误塞进安装流程。
+     */
+    public boolean clearlyApk() {
         var lower = name.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".apk") || lower.endsWith(".apks") || lower.endsWith(".xapk")
             || lower.endsWith(".apkm") || lower.endsWith(".zip")) {
@@ -40,9 +43,7 @@ public final class DownloadProbe {
             if (m.contains("android.package-archive")) return true;
             if (m.contains("zip")) return true;
         }
-        // 既没有后缀也没有可用类型：当成 APK 试一次，解析失败会回退到下载
-        return lower.indexOf('.') < 0 || mime == null || mime.isEmpty()
-            || "application/octet-stream".equals(mime);
+        return false;
     }
 
     public String host() {

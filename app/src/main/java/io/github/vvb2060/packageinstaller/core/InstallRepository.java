@@ -31,6 +31,7 @@ import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadEngine;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
 import io.github.vvb2060.packageinstaller.datamodel.NetDataSource;
+import io.github.vvb2060.packageinstaller.datamodel.Urls;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadProgress;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
@@ -119,7 +120,8 @@ public class InstallRepository implements Closeable {
         }
         var url = intent.getStringExtra(Intent.EXTRA_TEXT);
         if (url != null) {
-            installResult.postValue(processUrl(url.trim()));
+            var first = Urls.first(url);
+            installResult.postValue(processUrl(first != null ? first : url.trim()));
             return;
         }
         installResult.postValue(new SettingsUserAction(safeMode));
@@ -130,16 +132,32 @@ public class InstallRepository implements Closeable {
      * 签名块（几百 KB），不把整个包拉下来。确认之后由 InstallService 负责续传下载 + 安装。
      */
     private InstallStage processUrl(String url) {
+        return processUrl(url, false);
+    }
+
+    /**
+     * @param forceInstall true 时跳过「是不是安装包」的分流（内部生成的应用下载地址用）
+     */
+    private InstallStage processUrl(String url, boolean forceInstall) {
         Log.v(TAG, "URL: " + url);
+        if (forceInstall) {
+            return previewUrl(url, null);
+        }
         var probe = probeQuietly(url);
-        if (probe != null && probe.mime != null
+        if (probe == null) probe = DownloadProbe.guess(url);
+        if (probe.mime != null
             && probe.mime.toLowerCase(java.util.Locale.ROOT).startsWith("text/html")) {
             return new InstallAborted(InstallAborted.ABORT_PARSE, "这是一个网页链接，不是文件");
         }
-        if (probe != null && !probe.looksLikeApk()) {
+        if (!probe.clearlyApk()) {
             // 明确不是安装包（mp4/pdf/jpg…），直接走下载确认
             return new DownloadConfirm(probe.url, probe.name, probe.mime, probe.size, probe.host());
         }
+        return previewUrl(url, probe);
+    }
+
+    /** 只做预览解析；解析失败时按后缀决定是报错还是转下载。 */
+    private InstallStage previewUrl(String url, DownloadProbe probe) {
         ApkLite parsedApk;
         try {
             var engine = new DownloadEngine(SSLContext.getDefault());
@@ -151,10 +169,15 @@ public class InstallRepository implements Closeable {
         } catch (Exception | LinkageError e) {
             if (cancelled) return new InstallAborted(InstallAborted.ABORT_CLOSE);
             Log.e(TAG, "Failed to preview: " + url, e);
-            if (probe != null) {
-                // 当成 APK 试过但解析不了（或者是普通文件），降级成下载
-                return new DownloadConfirm(probe.url, probe.name, probe.mime, probe.size,
-                    probe.host());
+            if (probe == null) {
+                // forceInstall（内部生成的应用地址）：解析不了就是错了，不要静默转下载
+                return new InstallAborted(InstallAborted.ABORT_PARSE, e.toString());
+            }
+            var fallback = probe;
+            if (!fallback.clearlyApk()) {
+                // 当成 APK 试过但解析不了，而且后缀就是个普通文件，降级成下载
+                return new DownloadConfirm(fallback.url, fallback.name, fallback.mime,
+                    fallback.size, fallback.host());
             }
             return new InstallAborted(InstallAborted.ABORT_PARSE, e.toString());
         }
@@ -277,7 +300,7 @@ public class InstallRepository implements Closeable {
             action.installExisting = true;
             return action;
         }
-        return processUrl("https://d.apkpure.com/b/XAPK/" + packageName + "?version=latest");
+        return processUrl("https://d.apkpure.com/b/XAPK/" + packageName + "?version=latest", true);
     }
 
     /** 安装包来源（供 Service 使用）。 */

@@ -119,7 +119,7 @@ public class DownloadsActivity extends FragmentActivity {
             main.post(() -> {
                 if (isDestroyed()) return;
                 probing = false;
-                if (result.looksLikeApk()) {
+                if (result.clearlyApk()) {
                     // 安装包交回原有的安装流程（预览 + 确认安装）
                     startActivity(new Intent(this, InstallLaunch.class)
                         .setAction(Intent.ACTION_SEND)
