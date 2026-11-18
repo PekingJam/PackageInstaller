@@ -37,11 +37,9 @@ import java.util.concurrent.Executors;
 import io.github.vvb2060.packageinstaller.App;
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.R;
-import io.github.vvb2060.packageinstaller.core.KeepAlive;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.core.RootShell;
 import io.github.vvb2060.packageinstaller.installmodel.SettingsUserAction;
-import io.github.vvb2060.packageinstaller.service.KeepAliveService;
 import io.github.vvb2060.packageinstaller.ui.fragments.SettingsFragment;
 
 public class MainActivity extends FragmentActivity {
@@ -97,12 +95,6 @@ public class MainActivity extends FragmentActivity {
                 new Intent(this, AppListActivity.class)));
         bindCard(R.id.action_settings, R.drawable.ic_settings, R.string.action_settings,
             R.string.action_settings_desc, v -> showSettings());
-        bindCard(R.id.action_default, R.drawable.ic_check_circle,
-            R.string.default_installer_title, R.string.default_installer_desc,
-            v -> setDefaultInstaller());
-        bindCard(R.id.action_keepalive, R.drawable.ic_power,
-            R.string.keepalive_title, R.string.keepalive_desc_off,
-            v -> toggleKeepAlive());
 
         modeChips = new TextView[]{findViewById(R.id.mode_auto),
             findViewById(R.id.mode_root_chip), findViewById(R.id.mode_shizuku_chip)};
@@ -140,40 +132,6 @@ public class MainActivity extends FragmentActivity {
         if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
             == PackageManager.PERMISSION_GRANTED) return;
         requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 42);
-    }
-
-    /** 设为默认安装器：Root 走 app_process 子进程静默设置，失败再退回系统选择器。 */
-    private void setDefaultInstaller() {
-        if (Privilege.modeOrUnknown() == Privilege.MODE_NONE) {
-            showDefaultChooser();
-            return;
-        }
-        executor.execute(() -> {
-            var error = Privilege.makeDefaultInstaller();
-            main.post(() -> {
-                if (isDestroyed()) return;
-                if (error == null) {
-                    Toast.makeText(this, R.string.default_done, Toast.LENGTH_LONG).show();
-                } else {
-                    Toast.makeText(this, getString(R.string.result_failed, error),
-                        Toast.LENGTH_LONG).show();
-                    showDefaultChooser();
-                }
-            });
-        });
-    }
-
-    private void showDefaultChooser() {
-        var intent = new Intent(Intent.ACTION_VIEW)
-            .setType("application/vnd.android.package-archive")
-            .putExtra(InstallLaunch.EXTRA_SET_DEFAULT, true);
-        try {
-            startActivity(Intent.createChooser(intent,
-                getString(R.string.default_chooser_title)));
-        } catch (RuntimeException e) {
-            Toast.makeText(this, getString(R.string.result_failed, e.toString()),
-                Toast.LENGTH_LONG).show();
-        }
     }
 
     /** 上次进程被杀（多半是未捕获异常）时把栈打出来，方便远程排查。 */
@@ -231,7 +189,6 @@ public class MainActivity extends FragmentActivity {
     protected void onResume() {
         super.onResume();
         refresh(true);
-        updateKeepAliveCard();
     }
 
     @Override
@@ -253,33 +210,6 @@ public class MainActivity extends FragmentActivity {
         ((TextView) card.findViewById(R.id.card_title)).setText(title);
         ((TextView) card.findViewById(R.id.card_desc)).setText(desc);
         card.setOnClickListener(listener);
-    }
-
-    private void toggleKeepAlive() {
-        var enabled = !KeepAlive.isEnabled(this);
-        KeepAlive.setEnabled(this, enabled);
-        if (enabled) {
-            KeepAliveService.start(this);
-            Toast.makeText(this, R.string.keepalive_on, Toast.LENGTH_SHORT).show();
-            executor.execute(() -> {
-                var root = Privilege.modeOrUnknown() == Privilege.MODE_ROOT;
-                if (!root) return;
-                KeepAlive.applyRootTweaks(this);
-                KeepAlive.startRootWatchdog(this);
-            });
-        } else {
-            KeepAliveService.stop(this);
-            Toast.makeText(this, R.string.keepalive_off, Toast.LENGTH_SHORT).show();
-            executor.execute(KeepAlive::stopRootWatchdog);
-        }
-        updateKeepAliveCard();
-    }
-
-    private void updateKeepAliveCard() {
-        var card = findViewById(R.id.action_keepalive);
-        var enabled = KeepAlive.isEnabled(this);
-        ((TextView) card.findViewById(R.id.card_desc)).setText(
-            enabled ? R.string.keepalive_desc_on : R.string.keepalive_desc_off);
     }
 
     private void refresh(boolean invalidate) {

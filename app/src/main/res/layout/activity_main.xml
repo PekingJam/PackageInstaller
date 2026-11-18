@@ -226,19 +226,7 @@
                 android:layout_weight="1" />
         </LinearLayout>
 
-        <include
-            android:id="@+id/action_default"
-            layout="@layout/card_action"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
 
-        <include
-            android:id="@+id/action_keepalive"
-            layout="@layout/card_action"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
 
 
         <TextView

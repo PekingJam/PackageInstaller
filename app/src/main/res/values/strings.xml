@@ -238,4 +238,5 @@
     <string name="delete_task_and_rest">Task and leftovers</string>
     <string name="delete_task_done_msg">&quot;%1$s&quot; is saved in the Download folder. Delete the file too?</string>
     <string name="delete_task_unfinished_msg">&quot;%1$s&quot; is unfinished. Clear the cached leftovers too?</string>
+    <string name="default_chooser_failed">Could not open the system chooser</string>
 </resources>

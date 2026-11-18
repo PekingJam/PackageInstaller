@@ -162,7 +162,7 @@ public class InstallRepository implements Closeable {
     private InstallStage previewUrl(String url, DownloadProbe probe) {
         ApkLite parsedApk;
         try {
-            var engine = new DownloadEngine(SSLContext.getDefault());
+            var engine = new DownloadEngine(newSslContext());
             closeable = engine;
             var dataSource = NetDataSource.open(engine, new URI(url));
             zipParser = new ZipParser(dataSource);
@@ -190,6 +190,21 @@ public class InstallRepository implements Closeable {
             if (name != null) parsedApk.label = name;
         }
         return stage;
+    }
+
+    /**
+     * 每次预览用一个新的 SSLContext。
+     * 共用默认上下文时，BoringSSL 会拿别的连接缓存下来的会话去 resume，
+     * 报 ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT。
+     */
+    private static SSLContext newSslContext() throws java.security.NoSuchAlgorithmException {
+        var context = SSLContext.getInstance("TLS");
+        try {
+            context.init(null, null, null);
+        } catch (java.security.KeyManagementException e) {
+            throw new java.security.NoSuchAlgorithmException(e.toString());
+        }
+        return context;
     }
 
     private static DownloadProbe probeQuietly(String url) {

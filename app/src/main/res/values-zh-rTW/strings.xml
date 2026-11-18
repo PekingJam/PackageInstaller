@@ -121,4 +121,5 @@
     <string name="delete_task_and_rest">刪任務和殘留</string>
     <string name="delete_task_done_msg">「%1$s」已儲存在 Download 目錄，要連檔案一起刪掉嗎？</string>
     <string name="delete_task_unfinished_msg">「%1$s」還沒下完，要連快取裡的殘留一起清掉嗎？</string>
+    <string name="default_chooser_failed">打不開系統選擇器</string>
 </resources>

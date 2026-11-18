@@ -238,4 +238,5 @@
     <string name="delete_task_and_rest">删任务和残留</string>
     <string name="delete_task_done_msg">「%1$s」已保存在 Download 目录，要连文件一起删掉吗？</string>
     <string name="delete_task_unfinished_msg">「%1$s」还没下完，要连缓存里的残留一起清掉吗？</string>
+    <string name="default_chooser_failed">打不开系统选择器</string>
 </resources>

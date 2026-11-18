@@ -172,6 +172,9 @@ public class DownloadEngine extends Thread implements Closeable {
             var params = engine.getSSLParameters();
             params.setEndpointIdentificationAlgorithm("HTTPS");
             engine.setSSLParameters(params);
+            // 不做 TLS 会话恢复：本引擎是多连接并发 + 多 IP，复用会话在
+            // BoringSSL 上会抛 ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT
+            engine.setEnableSessionCreation(false);
             engine.beginHandshake();
         }
         var slot = new ChannelSlot(channel, engine);
