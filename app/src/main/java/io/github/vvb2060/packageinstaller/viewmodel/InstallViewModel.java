@@ -34,6 +34,7 @@ import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
 import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
 import io.github.vvb2060.packageinstaller.service.InstallService;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
+import io.github.vvb2060.packageinstaller.datamodel.DownloadTask;
 import io.github.vvb2060.packageinstaller.datamodel.Urls;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
@@ -168,7 +169,8 @@ public class InstallViewModel extends AndroidViewModel {
 
                         @Override
                         public void onSuccess() {
-                            installResult.postValue(new InstallSuccess(apk, null, false));
+                            installResult.postValue(new InstallSuccess(apk,
+                                Privilege.launchIntent(apk.packageName), false));
                         }
 
                         @Override
@@ -224,6 +226,9 @@ public class InstallViewModel extends AndroidViewModel {
         handoff = true;
     }
 
+    /** 前台下载过程中登记的下载任务 id；列表里同步显示这条下载。 */
+    private volatile String trackedTaskId;
+
     public void initiateForegroundInstall(boolean setInstaller, boolean full) {
         if (cancelled) {
             installResult.setValue(new InstallAborted(InstallAborted.ABORT_WRITE));
@@ -241,26 +246,49 @@ public class InstallViewModel extends AndroidViewModel {
                 installResult.postValue(new InstallInstalling(apk, repository.getSourceUrl() != null));
                 var url = repository.getSourceUrl();
                 if (url != null) {
+                    // 前台下载同样写进下载任务列表，免得关掉弹窗就「凭空消失」
+                    var taskId = DownloadTask.idOf(url);
+                    trackedTaskId = taskId;
+                    var taskName = apk.getLabel();
+                    if (taskName == null || taskName.isEmpty()) {
+                        taskName = DownloadProbe.guess(url).name;
+                    }
+                    var task = new DownloadTask(taskId, url, taskName,
+                        DownloadProbe.mimeFromName(taskName), DownloadTask.STATE_ACTIVE);
+                    task.kind = DownloadTask.KIND_INSTALL;
+                    DownloadTask.upsert(getApplication(), task);
+
+                    var lastReport = new long[]{0L};
                     var file = ResumableDownload.download(getApplication(), url,
-                        (downloaded, total, speed) -> downloadProgress.postValue(
-                            new DownloadProgress(downloaded, total, speed)),
+                        (downloaded, total, speed) -> {
+                            downloadProgress.postValue(new DownloadProgress(downloaded, total, speed));
+                            var now = System.currentTimeMillis();
+                            if (now - lastReport[0] > 800) {
+                                lastReport[0] = now;
+                                DownloadTask.updateProgress(getApplication(), taskId,
+                                    downloaded, total);
+                            }
+                        },
                         () -> cancelled || handoff);
+                    DownloadTask.setState(getApplication(), taskId,
+                        DownloadTask.STATE_INSTALLING, null, null, file.length(), file.length());
                     try (var pfd = ParcelFileDescriptor.open(file,
                         ParcelFileDescriptor.MODE_READ_ONLY)) {
                         var fileParser = new ZipParser(FileDataSource.asDataSource(pfd));
                         var fileApk = fileParser.parse();
                         installResult.postValue(new InstallInstalling(fileApk, false));
-                        runInstall(fileApk, fileParser, setInstaller, full);
+                        runInstall(fileApk, fileParser, setInstaller, full, taskId);
                     } finally {
                         //noinspection ResultOfMethodCallIgnored
                         file.delete();
                     }
                     return;
                 }
-                runInstall(apk, parser, setInstaller, full);
+                runInstall(apk, parser, setInstaller, full, null);
             } catch (Throwable e) {
                 if (handoff) {
-                    // 用户点了「转后台」：前台已经退出，交给 Service 续传 + 安装
+                    // 用户点了「转后台」：前台已经退出，交给 Service 续传 + 安装。
+                    // 任务记录不在这里收尾，Service 会用同一个 id 接着更新。
                     Log.i("InstallViewModel", "handoff to background service");
                     var url2 = repository == null ? null : repository.getSourceUrl();
                     var label = repository == null || repository.getApkLite() == null
@@ -270,26 +298,48 @@ public class InstallViewModel extends AndroidViewModel {
                     return;
                 }
                 Log.e("InstallViewModel", "foreground install failed", e);
+                if (trackedTaskId != null) {
+                    DownloadTask.setState(getApplication(), trackedTaskId,
+                        DownloadTask.STATE_FAILED, null,
+                        cancelled ? null : e.toString(), -1, -1);
+                }
                 installResult.postValue(new InstallAborted(InstallAborted.ABORT_WRITE, e.toString()));
             }
         });
     }
 
-    private void runInstall(ApkLite apk, ZipParser parser, boolean setInstaller, boolean full) {
+    private void runInstall(ApkLite apk, ZipParser parser, boolean setInstaller, boolean full,
+                            String taskId) {
         InstallRunner.run(getApplication(), apk, parser, setInstaller, full,
             new InstallRunner.Callback() {
+                private long lastTouch;
+
                 @Override
                 public void onProgress(int percent) {
                     stagingProgress.postValue(percent);
+                    if (taskId == null) return;
+                    var now = System.currentTimeMillis();
+                    if (now - lastTouch < 800) return;
+                    lastTouch = now;
+                    DownloadTask.touch(getApplication(), taskId);
                 }
 
                 @Override
                 public void onSuccess() {
-                    installResult.postValue(new InstallSuccess(apk, null, false));
+                    if (taskId != null) {
+                        DownloadTask.setState(getApplication(), taskId,
+                            DownloadTask.STATE_DONE, null, null, -1, -1);
+                    }
+                    installResult.postValue(new InstallSuccess(apk,
+                        Privilege.launchIntent(apk.packageName), false));
                 }
 
                 @Override
                 public void onFailure(String reason) {
+                    if (taskId != null) {
+                        DownloadTask.setState(getApplication(), taskId,
+                            DownloadTask.STATE_FAILED, null, reason, -1, -1);
+                    }
                     installResult.postValue(new InstallFailed(apk,
                         PackageInstaller.STATUS_FAILURE, reason));
                 }
@@ -321,6 +371,12 @@ public class InstallViewModel extends AndroidViewModel {
     public void cleanup() {
         if (cancelled) return;
         cancelled = true;
+        // 用户主动放弃：列表里的这条算「未完成」，.part 留着可以继续
+        var taskId = trackedTaskId;
+        if (taskId != null) {
+            DownloadTask.setState(getApplication(), taskId, DownloadTask.STATE_FAILED,
+                null, null, -1, -1);
+        }
         // 解析阶段还可能在等 su / Shizuku，此时 repository 尚未创建
         if (repository != null) repository.close();
     }

@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.graphics.drawable.BitmapDrawable;
+import android.graphics.Bitmap;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.ParcelFileDescriptor;
@@ -34,18 +34,18 @@ public final class AppListSource {
     private static final String TAG = AppListSource.class.getSimpleName();
     private static final String SPLIT = "__PI_SPLIT__";
     private static final String PM = RootInstaller.PM;
-    private static final int ICON_DP = 48;
+    /** 图标按 42dp 解，和列表里 ImageView 的实际尺寸对齐，比 48dp 省三成像素。 */
+    private static final int ICON_DP = 42;
 
     public static final class Entry {
         public final String packageName;
         public final String apkPath;
         public final boolean system;
-        public final boolean enabled;
-        public final boolean installed;
+        public boolean enabled;
+        public boolean installed;
         public long versionCode;
         public String versionName;
         public String label;
-        public Drawable icon;
 
         Entry(String packageName, String apkPath, boolean system, boolean enabled,
               boolean installed, long versionCode, String versionName, String label) {
@@ -79,13 +79,40 @@ public final class AppListSource {
         return fromPackageManager(context);
     }
 
-    /** 补齐名称、版本与图标（可能解析 APK，比较慢，放后台）。 */
-    public static void details(Context context, Entry entry) {
-        if (entry.icon != null && !entry.label.equals(entry.packageName)) return;
-        fillFromArchive(context.getPackageManager(), entry);
-        if (entry.icon == null) {
-            entry.icon = context.getDrawable(
-                io.github.vvb2060.packageinstaller.R.mipmap.ic_app_placeholder);
+    /**
+     * 补齐名称与版本，同时解出图标位图返回（拿不到返回 null）。
+     * 只打开一次 APK，两个信息一起取；图标交给调用方缓存。
+     */
+    public static Bitmap details(Context context, Entry entry) {
+        var pm = context.getPackageManager();
+        if (entry.apkPath == null) return null;
+        try {
+            var info = pm.getPackageArchiveInfo(entry.apkPath, 0);
+            if (info == null || info.applicationInfo == null) return null;
+            var app = info.applicationInfo;
+            app.sourceDir = entry.apkPath;
+            app.publicSourceDir = entry.apkPath;
+            var label = app.loadLabel(pm);
+            if (label != null && label.length() > 0) entry.label = label.toString();
+            if (info.versionName != null) entry.versionName = info.versionName;
+            entry.versionCode = info.getLongVersionCode();
+            var drawable = app.loadIcon(pm);
+            if (drawable == null) drawable = pm.getDefaultActivityIcon();
+            return toBitmap(drawable);
+        } catch (RuntimeException | LinkageError e) {
+            Log.w(TAG, "archive info failed: " + entry.apkPath, e);
+            return null;
+        }
+    }
+
+    private static Bitmap toBitmap(Drawable drawable) {
+        if (drawable == null) return null;
+        try {
+            var resources = Resources.getSystem();
+            var size = (int) (ICON_DP * resources.getDisplayMetrics().density);
+            return DrawableKt.toBitmap(drawable, size, size, null);
+        } catch (RuntimeException | LinkageError | OutOfMemoryError e) {
+            return null;
         }
     }
 
@@ -127,35 +154,39 @@ public final class AppListSource {
         return list;
     }
 
-    private static void fillFromArchive(PackageManager pm, Entry entry) {
-        if (entry.apkPath == null) return;
+    private static ApplicationInfo archiveInfo(PackageManager pm, Entry entry) {
+        if (entry.apkPath == null) return null;
         try {
             var info = pm.getPackageArchiveInfo(entry.apkPath, 0);
-            if (info == null || info.applicationInfo == null) return;
+            if (info == null || info.applicationInfo == null) return null;
             var app = info.applicationInfo;
             app.sourceDir = entry.apkPath;
             app.publicSourceDir = entry.apkPath;
-            var label = app.loadLabel(pm);
-            if (label != null && label.length() > 0) entry.label = label.toString();
-            if (info.versionName != null) entry.versionName = info.versionName;
-            entry.versionCode = info.getLongVersionCode();
-            var icon = app.loadIcon(pm);
-            if (icon != null) entry.icon = shrink(icon);
+            return app;
         } catch (RuntimeException | LinkageError e) {
-            Log.w(TAG, "archive info failed: " + entry.apkPath, e);
+            Log.w(TAG, "archive open failed: " + entry.apkPath, e);
+            return null;
         }
     }
 
-    private static Drawable shrink(Drawable drawable) {
-        if (drawable == null) return null;
-        var resources = Resources.getSystem();
-        var size = (int) (ICON_DP * resources.getDisplayMetrics().density);
+    /**
+     * 按需取一个应用的图标位图。调用方负责缓存与回收 —— 这里不往 Entry 上挂，
+     * 否则几百个图标会跟着列表一起常驻。
+     */
+    public static Bitmap loadIcon(Context context, Entry entry) {
+        var pm = context.getPackageManager();
+        Drawable drawable = null;
         try {
-            var bitmap = DrawableKt.toBitmap(drawable, size, size, null);
-            if (bitmap == null) return drawable;
-            return new BitmapDrawable(resources, bitmap);
-        } catch (Throwable e) {
-            return drawable;
+            var app = archiveInfo(pm, entry);
+            if (app != null) drawable = app.loadIcon(pm);
+            if (drawable == null) drawable = pm.getDefaultActivityIcon();
+            if (drawable == null) return null;
+            var resources = Resources.getSystem();
+            var size = (int) (ICON_DP * resources.getDisplayMetrics().density);
+            return DrawableKt.toBitmap(drawable, size, size, null);
+        } catch (RuntimeException | LinkageError | OutOfMemoryError e) {
+            Log.w(TAG, "load icon failed: " + entry.packageName, e);
+            return null;
         }
     }
 
@@ -257,22 +288,8 @@ public final class AppListSource {
                 info.getLongVersionCode(),
                 info.versionName == null ? "" : info.versionName,
                 label == null ? info.packageName : label.toString());
-            try {
-                entry.icon = shrink(app.loadIcon(pm));
-            } catch (RuntimeException e) {
-                entry.icon = null;
-            }
             list.add(entry);
         }
         return list;
-    }
-
-    /** 后台线程执行的图标补全（shell 模式下个别 APK 解析失败时用）。 */
-    public static Drawable loadIcon(Context context, Entry entry) {
-        if (entry.icon != null) return entry.icon;
-        var pm = context.getPackageManager();
-        fillFromArchive(pm, entry);
-        if (entry.icon == null) entry.icon = pm.getDefaultActivityIcon();
-        return entry.icon;
     }
 }

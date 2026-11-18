@@ -147,7 +147,16 @@ public final class CardDialog {
             var needed = 0;
             for (int i = 0; i < count; i++) {
                 var child = buttons.getChildAt(i);
-                needed += child.getMeasuredWidth();
+                var width = child.getMeasuredWidth();
+                // 按钮是 WRAP_CONTENT，文字换行后实测宽度会变小，拿它判断会误判成「放得下」。
+                // 用画笔量单行宽度，才能真正看出会不会挤。
+                if (child instanceof TextView textView) {
+                    var singleLine = (int) Math.ceil(textView.getPaint()
+                        .measureText(String.valueOf(textView.getText())))
+                        + textView.getPaddingLeft() + textView.getPaddingRight();
+                    width = Math.max(width, singleLine);
+                }
+                needed += width;
                 var params = (LinearLayout.LayoutParams) child.getLayoutParams();
                 needed += params.getMarginStart() + params.getMarginEnd();
             }
@@ -160,6 +169,11 @@ public final class CardDialog {
                 params.setMarginStart(0);
                 params.topMargin = i == 0 ? 0 : dp(8, dialog.getContext());
                 child.setLayoutParams(params);
+                if (child instanceof TextView textView) {
+                    // 竖排后整行都是它的，没必要再压成单行
+                    textView.setSingleLine(false);
+                    textView.setMaxLines(2);
+                }
             }
         });
     }

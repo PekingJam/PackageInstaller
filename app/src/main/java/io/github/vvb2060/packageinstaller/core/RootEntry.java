@@ -80,12 +80,21 @@ public final class RootEntry {
         var match = IntentFilter.MATCH_CATEGORY_TYPE | IntentFilter.MATCH_ADJUSTMENT_MASK;
         var components = set.toArray(new ComponentName[0]);
 
+        // AOSP 的偏好是「当前候选集合必须与写入时完全一致」才生效。旧记录（包括系统安装器
+        // 自己留下的那条）只要有一条先命中，就轮不到我们，所以先全部清干净再写。
+        var myPackage = activity.getPackageName();
+        clearPreferred(pm, myPackage);
+        for (var component : components) {
+            if (component == null || myPackage.equals(component.getPackageName())) continue;
+            clearPreferred(pm, component.getPackageName());
+        }
+
         var applied = 0;
         for (var action : new String[]{Intent.ACTION_VIEW, Intent.ACTION_INSTALL_PACKAGE}) {
             var filter = new IntentFilter(action, MIME);
             filter.addCategory(Intent.CATEGORY_DEFAULT);
             if (parameters.length == 6) {
-                method.invoke(pm, filter, match, components, activity, userId, false);
+                method.invoke(pm, filter, match, components, activity, userId, true);
             } else {
                 method.invoke(pm, filter, match, components, activity, userId);
             }
@@ -93,6 +102,14 @@ public final class RootEntry {
         }
         System.out.println("OK " + applied);
         return true;
+    }
+
+    private static void clearPreferred(Object pm, String packageName) {
+        try {
+            pm.getClass().getMethod("clearPackagePreferredActivities", String.class)
+                .invoke(pm, packageName);
+        } catch (Throwable ignored) {
+        }
     }
 
     /** API 35 之后 addPreferredActivity 多了一个 boolean 参数，按签名长度适配。 */

@@ -30,6 +30,9 @@ import io.github.vvb2060.packageinstaller.ui.Format;
 public class DownloadService extends Service {
     private static final String TAG = DownloadService.class.getSimpleName();
 
+    /** 同 InstallService.RUNNING：进程活得越久计数越准，进程没了自然归零。 */
+    public static volatile int RUNNING;
+
     public static final String EXTRA_URL = "url";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_MIME = "mime";
@@ -65,6 +68,7 @@ public class DownloadService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        RUNNING++;
         var manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager != null && manager.getNotificationChannel(CHANNEL_ID) == null) {
             var channel = new NotificationChannel(CHANNEL_ID,
@@ -94,6 +98,7 @@ public class DownloadService extends Service {
 
     @Override
     public void onDestroy() {
+        RUNNING = Math.max(0, RUNNING - 1);
         executor.shutdownNow();
         super.onDestroy();
     }

@@ -1,6 +1,7 @@
 package io.github.vvb2060.packageinstaller.core;
 
 import android.Manifest;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -344,6 +345,40 @@ public final class Privilege {
             return null;
         }
         return notGranted();
+    }
+
+    /**
+     * 安装完成后用于「打开」的 Intent；拿不到返回 null（比如应用没有启动界面）。
+     * MIUI 的「获取应用列表」隐私开关会挡住 getLaunchIntentForPackage，
+     * 这时退回 root 解析 launcher 组件。
+     */
+    public static Intent launchIntent(String packageName) {
+        var context = appContext;
+        if (context == null || packageName == null) return null;
+        try {
+            var intent = context.getPackageManager().getLaunchIntentForPackage(packageName);
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                return intent;
+            }
+        } catch (RuntimeException ignored) {
+        }
+        if (mode() != MODE_ROOT) return null;
+        var resolved = RootShell.exec("/system/bin/cmd package resolve-activity --brief"
+            + " -a android.intent.action.MAIN -c android.intent.category.LAUNCHER"
+            + " --user " + userId() + " " + RootShell.quote(packageName));
+        var matcher = COMPONENT.matcher(resolved.output);
+        String component = null;
+        while (matcher.find()) {
+            component = matcher.group(0);
+        }
+        if (component == null) return null;
+        var activity = ComponentName.unflattenFromString(component);
+        if (activity == null) return null;
+        return new Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setComponent(activity)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     }
 
     public static String launchApp(String packageName) {

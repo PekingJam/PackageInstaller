@@ -22,13 +22,21 @@ public final class DownloadTask {
     private static final Object LOCK = new Object();
 
     public static final String STATE_ACTIVE = "active";
+    /** 包已经下完，正在写安装会话。 */
+    public static final String STATE_INSTALLING = "installing";
     public static final String STATE_DONE = "done";
     public static final String STATE_FAILED = "failed";
+
+    /** 普通文件下载，完成后落在系统 Download 目录。 */
+    public static final String KIND_SAVE = "save";
+    /** 安装包下载，下完直接进安装流程，不落 Download 目录。 */
+    public static final String KIND_INSTALL = "install";
 
     public final String id;
     public final String url;
     public String name;
     public String mime;
+    public String kind;
     public long size;
     public long downloaded;
     public long updatedAt;
@@ -41,12 +49,18 @@ public final class DownloadTask {
         this.url = url;
         this.name = name;
         this.mime = mime;
+        this.kind = KIND_SAVE;
         this.state = state;
         this.updatedAt = System.currentTimeMillis();
     }
 
     public boolean looksLikeApk() {
-        return DownloadProbe.mimeFromName(name).contains("package-archive");
+        return KIND_INSTALL.equals(kind)
+            || DownloadProbe.mimeFromName(name).contains("package-archive");
+    }
+
+    public boolean isInstall() {
+        return KIND_INSTALL.equals(kind);
     }
 
     private JSONObject toJson() throws JSONException {
@@ -55,6 +69,7 @@ public final class DownloadTask {
         json.put("url", url);
         json.put("name", name);
         json.put("mime", mime);
+        json.put("kind", kind);
         json.put("size", size);
         json.put("downloaded", downloaded);
         json.put("updatedAt", updatedAt);
@@ -70,6 +85,8 @@ public final class DownloadTask {
         task.size = json.optLong("size", -1);
         task.downloaded = json.optLong("downloaded", 0);
         task.updatedAt = json.optLong("updatedAt", 0);
+        var kind = json.optString("kind", "");
+        task.kind = kind.isEmpty() ? KIND_SAVE : kind;
         task.target = json.optString("target", null);
         task.error = json.optString("error", null);
         return task;
@@ -97,13 +114,39 @@ public final class DownloadTask {
         }
     }
 
+    /** 新增或刷新一条任务记录；同一个 id 已经存在时保留已下载的进度。 */
     public static void upsert(Context context, DownloadTask task) {
         synchronized (LOCK) {
             var list = all(context);
-            list.removeIf(item -> item.id.equals(task.id));
+            for (var old : list) {
+                if (!old.id.equals(task.id)) continue;
+                if (old.downloaded > 0 && !STATE_DONE.equals(old.state)) {
+                    task.downloaded = Math.max(task.downloaded, old.downloaded);
+                }
+                if (task.size <= 0) task.size = old.size;
+                if (task.name == null || task.name.isEmpty()) task.name = old.name;
+                list.remove(old);
+                break;
+            }
             list.add(0, task);
             while (list.size() > MAX_RECORDS) list.remove(list.size() - 1);
             write(context, list);
+        }
+    }
+
+    /**
+     * 心跳：安装阶段没有字节进度，只把 updatedAt 往前推，
+     * 免得列表把正在写安装会话的任务当成「已中断」。
+     */
+    public static void touch(Context context, String id) {
+        synchronized (LOCK) {
+            var list = all(context);
+            for (var item : list) {
+                if (!item.id.equals(id)) continue;
+                item.updatedAt = System.currentTimeMillis();
+                write(context, list);
+                return;
+            }
         }
     }
 

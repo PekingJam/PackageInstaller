@@ -25,6 +25,8 @@ import io.github.vvb2060.packageinstaller.apk.ZipParser;
 import io.github.vvb2060.packageinstaller.core.InstallRunner;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.datamodel.DataSource;
+import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
+import io.github.vvb2060.packageinstaller.datamodel.DownloadTask;
 import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
 import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
 import io.github.vvb2060.packageinstaller.ui.Format;
@@ -36,6 +38,13 @@ import io.github.vvb2060.packageinstaller.ui.InstallResultActivity;
  */
 public class InstallService extends Service {
     private static final String TAG = InstallService.class.getSimpleName();
+
+    /**
+     * 本进程里这个服务是否活着。进程被杀后静态字段自然回到 false，
+     * 下载列表靠它判断「正在安装」是真是假。同一个进程里可能有多个服务
+     * 实例前后接力，用计数而不是布尔值。
+     */
+    public static volatile int RUNNING;
 
     public static final String EXTRA_PATH = "path";
     public static final String EXTRA_URI = "uri";
@@ -92,6 +101,7 @@ public class InstallService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        RUNNING++;
         var manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager != null && manager.getNotificationChannel(CHANNEL_ID) == null) {
             var channel = new NotificationChannel(CHANNEL_ID,
@@ -121,6 +131,7 @@ public class InstallService extends Service {
 
     @Override
     public void onDestroy() {
+        RUNNING = Math.max(0, RUNNING - 1);
         executor.shutdownNow();
         super.onDestroy();
     }
@@ -132,21 +143,39 @@ public class InstallService extends Service {
         var temporary = intent.getBooleanExtra(EXTRA_TEMP, false);
         var network = path == null && uri != null
             && (uri.startsWith("http://") || uri.startsWith("https://"));
+        // 网络来源从第一秒就登记成下载任务，切后台/关界面后列表里也看得到
+        final var taskId = network ? DownloadTask.idOf(uri) : null;
         Closeable source = null;
         try {
             Privilege.attach(getApplicationContext());
 
             if (network) {
+                var taskLabel = label == null || label.isEmpty()
+                    ? DownloadProbe.guess(uri).name : label;
+                var task = new DownloadTask(taskId, uri, taskLabel,
+                    DownloadProbe.mimeFromName(taskLabel), DownloadTask.STATE_ACTIVE);
+                task.kind = DownloadTask.KIND_INSTALL;
+                DownloadTask.upsert(this, task);
+
                 updateProgress(getString(R.string.notify_downloading), label, 0,
                     getString(R.string.notify_download_starting));
+                var lastReport = new long[]{0L};
                 var file = ResumableDownload.download(this, uri,
-                    (downloaded, total, speed) -> updateProgress(
-                        getString(R.string.notify_downloading), label,
-                        total > 0 ? (int) (downloaded * 100 / total) : -1,
-                        Format.size(downloaded)
-                            + (total > 0 ? " / " + Format.size(total) : "")
-                            + " · " + Format.speed(speed)),
+                    (downloaded, total, speed) -> {
+                        updateProgress(getString(R.string.notify_downloading), label,
+                            total > 0 ? (int) (downloaded * 100 / total) : -1,
+                            Format.size(downloaded)
+                                + (total > 0 ? " / " + Format.size(total) : "")
+                                + " · " + Format.speed(speed));
+                        var now = System.currentTimeMillis();
+                        if (now - lastReport[0] > 800) {
+                            lastReport[0] = now;
+                            DownloadTask.updateProgress(this, taskId, downloaded, total);
+                        }
+                    },
                     () -> cancelRequested);
+                DownloadTask.setState(this, taskId, DownloadTask.STATE_INSTALLING,
+                    null, null, file.length(), file.length());
                 path = file.getAbsolutePath();
                 temporary = true;
             }
@@ -182,21 +211,37 @@ public class InstallService extends Service {
             InstallRunner.run(this, apk, parser,
                 intent.getBooleanExtra(EXTRA_SET_INSTALLER, true), full,
                 new InstallRunner.Callback() {
+                    private long lastTouch;
+
                     @Override
                     public void onProgress(int percent) {
                         updateProgress(getString(R.string.notify_installing), name,
                             percent > 100 ? -1 : percent, null);
+                        // 写安装会话期间保持任务记录新鲜，列表里才不会变成「未完成」
+                        if (taskId == null) return;
+                        var now = System.currentTimeMillis();
+                        if (now - lastTouch < 800) return;
+                        lastTouch = now;
+                        DownloadTask.touch(InstallService.this, taskId);
                     }
 
                     @Override
                     public void onSuccess() {
                         if (finalTemporary && finalPath != null) deleteQuietly(finalPath);
+                        if (taskId != null) {
+                            DownloadTask.setState(InstallService.this, taskId,
+                                DownloadTask.STATE_DONE, null, null, -1, -1);
+                        }
                         notifySuccess(name, apk.packageName);
                         finish(startId);
                     }
 
                     @Override
                     public void onFailure(String reason) {
+                        if (taskId != null) {
+                            DownloadTask.setState(InstallService.this, taskId,
+                                DownloadTask.STATE_FAILED, null, reason, -1, -1);
+                        }
                         notifyFailure(name, reason, finalNetwork ? finalUri : null,
                             finalTemporary ? finalPath : null);
                         finish(startId);
@@ -204,6 +249,12 @@ public class InstallService extends Service {
                 });
         } catch (Throwable e) {
             Log.e(TAG, "install failed", e);
+            var reason = cancelRequested ? getString(R.string.notify_cancelled) : e.toString();
+            if (taskId != null) {
+                // 取消 / 中断不写错误原因：列表里算「未完成」，可以点继续
+                DownloadTask.setState(this, taskId, DownloadTask.STATE_FAILED, null,
+                    cancelRequested ? null : reason, -1, -1);
+            }
             if (cancelRequested) {
                 notifyFailure(label == null ? getString(R.string.app_name) : label,
                     getString(R.string.notify_cancelled), network ? uri : null, null);

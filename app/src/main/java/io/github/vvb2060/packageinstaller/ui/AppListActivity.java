@@ -1,8 +1,10 @@
 package io.github.vvb2060.packageinstaller.ui;
 
 import android.content.ActivityNotFoundException;
+import android.content.ComponentCallbacks2;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -10,6 +12,7 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.LruCache;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
@@ -47,6 +50,18 @@ public class AppListActivity extends FragmentActivity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<AppListSource.Entry> all = new ArrayList<>();
     private final List<AppListSource.Entry> shown = new ArrayList<>();
+
+    /**
+     * 图标缓存，按字节数限 24MB。42dp 一张约 63KB，300 个应用也放得下；
+     * 离开界面时整个丢掉，不会跟着进程常驻。
+     */
+    private final LruCache<String, Bitmap> iconCache = new LruCache<>(24 * 1024 * 1024) {
+        @Override
+        protected int sizeOf(String key, Bitmap value) {
+            return value.getByteCount();
+        }
+    };
+    private final java.util.Set<String> iconLoading = new java.util.HashSet<>();
 
     private AppAdapter adapter;
     private ProgressBar progress;
@@ -126,7 +141,37 @@ public class AppListActivity extends FragmentActivity {
         if (currentDialog != null) currentDialog.dismiss();
         main.removeCallbacksAndMessages(null);
         executor.shutdownNow();
+        // 位图是 native 内存，不主动清会被缓存一直攥着
+        iconCache.evictAll();
+        all.clear();
+        shown.clear();
         super.onDestroy();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            iconCache.evictAll();
+        }
+    }
+
+    /** 后台解一个图标；结果按包名回填，ImageView 已经被复用时丢弃。 */
+    private void requestIcon(AppListSource.Entry entry, ImageView target) {
+        if (iconLoading.contains(entry.packageName)) return;
+        iconLoading.add(entry.packageName);
+        var appContext = getApplicationContext();
+        executor.execute(() -> {
+            var bitmap = AppListSource.loadIcon(appContext, entry);
+            main.post(() -> {
+                iconLoading.remove(entry.packageName);
+                if (bitmap == null || isDestroyed()) return;
+                iconCache.put(entry.packageName, bitmap);
+                if (entry.packageName.equals(target.getTag())) {
+                    target.setImageBitmap(bitmap);
+                }
+            });
+        });
     }
 
     private void updateFilterStyle() {
@@ -158,10 +203,11 @@ public class AppListActivity extends FragmentActivity {
                 }
             });
 
-            // 名称/图标要解 APK，慢慢补，凑够一批刷一次
+            // 名称/图标要解 APK，慢慢补，凑够一批刷一次；解出来的图标进内存缓存
             var count = 0;
             for (var entry : list) {
-                AppListSource.details(this, entry);
+                var bitmap = AppListSource.details(this, entry);
+                if (bitmap != null) iconCache.put(entry.packageName, bitmap);
                 if (++count % 8 == 0) {
                     main.post(() -> {
                         if (!isDestroyed()) adapter.notifyDataSetChanged();
@@ -215,7 +261,10 @@ public class AppListActivity extends FragmentActivity {
             subtitle.append(" · ").append(getString(R.string.app_state_uninstalled));
         }
 
-        dialog.icon(entry.icon)
+        dialog.icon(iconCache.get(entry.packageName) == null
+                ? getDrawable(R.mipmap.ic_app_placeholder)
+                : new android.graphics.drawable.BitmapDrawable(getResources(),
+                    iconCache.get(entry.packageName)))
             .title(entry.label)
             .status(subtitle.toString());
 
@@ -293,7 +342,11 @@ public class AppListActivity extends FragmentActivity {
     private void toggleEnabled(AppListSource.Entry entry) {
         var enable = !entry.enabled;
         runAction(enable ? R.string.app_action_enable : R.string.app_action_disable,
-            () -> Privilege.setEnabled(entry.packageName, enable));
+            () -> Privilege.setEnabled(entry.packageName, enable),
+            () -> {
+                entry.enabled = enable;
+                adapter.notifyDataSetChanged();
+            });
     }
 
     private void confirmClear(AppListSource.Entry entry) {
@@ -305,7 +358,12 @@ public class AppListActivity extends FragmentActivity {
     private void confirmUninstall(AppListSource.Entry entry) {
         confirm(R.string.app_confirm_uninstall_title, R.string.app_confirm_uninstall_message,
             R.string.app_action_uninstall, () -> runAction(R.string.app_action_uninstall,
-                () -> Privilege.uninstall(entry.packageName, entry.versionCode, entry.system)));
+                () -> Privilege.uninstall(entry.packageName, entry.versionCode, entry.system),
+                () -> {
+                    // 卸载成功后直接从内存列表里摘掉这条，不用重读整张表
+                    all.remove(entry);
+                    applyFilter();
+                }));
     }
 
     private void confirm(int title, int message, int positive, Runnable onConfirm) {
@@ -324,6 +382,14 @@ public class AppListActivity extends FragmentActivity {
     }
 
     private void runAction(int successLabel, Supplier<String> operation) {
+        runAction(successLabel, operation, null);
+    }
+
+    /**
+     * 执行特权操作。成功后只在内存里更新受影响的那一条，不重读整张列表 ——
+     * 重读要跑一次 pm list 再逐个解 APK，只有真正进入这个界面时才值得做。
+     */
+    private void runAction(int successLabel, Supplier<String> operation, Runnable afterSuccess) {
         executor.execute(() -> {
             if (Privilege.mode() == Privilege.MODE_NONE) {
                 main.post(() -> Toast.makeText(this, R.string.no_privilege,
@@ -341,11 +407,11 @@ public class AppListActivity extends FragmentActivity {
                 if (isDestroyed()) return;
                 if (result == null) {
                     Toast.makeText(this, getString(successLabel), Toast.LENGTH_SHORT).show();
+                    if (afterSuccess != null) afterSuccess.run();
                 } else {
                     Toast.makeText(this, getString(R.string.result_failed, result),
                         Toast.LENGTH_LONG).show();
                 }
-                main.postDelayed(this::load, 800);
             });
         });
     }
@@ -355,7 +421,6 @@ public class AppListActivity extends FragmentActivity {
         public int getCount() {
             return shown.size();
         }
-
         @Override
         public Object getItem(int position) {
             return shown.get(position);
@@ -372,10 +437,14 @@ public class AppListActivity extends FragmentActivity {
                 : getLayoutInflater().inflate(R.layout.item_app, parent, false);
             var entry = shown.get(position);
             var icon = (ImageView) view.findViewById(R.id.app_icon);
-            if (entry.icon != null) {
-                icon.setImageDrawable(entry.icon);
+            // 复用 convertView 时目标会变，用 tag 认人，避免异步结果贴错行
+            icon.setTag(entry.packageName);
+            var bitmap = iconCache.get(entry.packageName);
+            if (bitmap != null) {
+                icon.setImageBitmap(bitmap);
             } else {
                 icon.setImageResource(R.mipmap.ic_app_placeholder);
+                requestIcon(entry, icon);
             }
             ((TextView) view.findViewById(R.id.app_label)).setText(entry.label);
             var sub = new StringBuilder(entry.packageName);

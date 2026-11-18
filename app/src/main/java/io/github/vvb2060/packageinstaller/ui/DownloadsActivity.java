@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -33,8 +34,8 @@ import io.github.vvb2060.packageinstaller.datamodel.DownloadStore;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadTask;
 import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
 import io.github.vvb2060.packageinstaller.service.DownloadService;
-import io.github.vvb2060.packageinstaller.ui.CardDialog;
 import io.github.vvb2060.packageinstaller.service.InstallService;
+import io.github.vvb2060.packageinstaller.ui.CardDialog;
 
 /** 下载任务列表：进行中 / 未完成（可继续）/ 已完成。 */
 public class DownloadsActivity extends FragmentActivity {
@@ -234,6 +235,7 @@ public class DownloadsActivity extends FragmentActivity {
         loading = true;
         executor.execute(() -> {
             var tasks = DownloadTask.all(this);
+            repairStale(tasks);
             var pending = ResumableDownload.pending(this);
             main.post(() -> {
                 loading = false;
@@ -241,6 +243,28 @@ public class DownloadsActivity extends FragmentActivity {
                 render(tasks, pending);
             });
         });
+    }
+
+    /**
+     * 进程被系统杀掉或本应用被覆盖安装后，记录会停在「下载中 / 安装中」，
+     * 但对应的前台服务已经不在了，继续等就是一个取消不掉的僵尸任务。
+     * 心跳停了 30 秒以上、服务又没在跑，就降级成「已中断」。
+     */
+    private void repairStale(List<DownloadTask> tasks) {
+        var now = System.currentTimeMillis();
+        for (var task : tasks) {
+            if (!DownloadTask.STATE_ACTIVE.equals(task.state)
+                && !DownloadTask.STATE_INSTALLING.equals(task.state)) continue;
+            var alive = (task.isInstall() ? InstallService.RUNNING : DownloadService.RUNNING) > 0;
+            if (alive && now - task.updatedAt < 30_000L) continue;
+            Log.w("DownloadsActivity", "stale task " + task.id + " state=" + task.state
+                + " alive=" + alive + " age=" + (now - task.updatedAt));
+            DownloadTask.setState(this, task.id, DownloadTask.STATE_FAILED,
+                task.target, null, -1, -1);
+            task.state = DownloadTask.STATE_FAILED;
+            task.error = null;
+            task.updatedAt = now;
+        }
     }
 
     private void render(List<DownloadTask> tasks, List<ResumableDownload.Pending> pending) {
@@ -316,7 +340,9 @@ public class DownloadsActivity extends FragmentActivity {
 
     private static int bucket(DownloadTask task, long now) {
         if (DownloadTask.STATE_DONE.equals(task.state)) return BUCKET_DONE;
-        if (DownloadTask.STATE_ACTIVE.equals(task.state) && now - task.updatedAt < 20_000L) {
+        if ((DownloadTask.STATE_ACTIVE.equals(task.state)
+                || DownloadTask.STATE_INSTALLING.equals(task.state))
+            && now - task.updatedAt < 20_000L) {
             return BUCKET_ACTIVE;
         }
         return BUCKET_UNFINISHED;
@@ -341,17 +367,27 @@ public class DownloadsActivity extends FragmentActivity {
 
         var primary = (TextView) row.findViewById(R.id.download_primary);
         var deleteButton = (TextView) row.findViewById(R.id.download_delete);
-        if (bucket(task, System.currentTimeMillis()) == BUCKET_ACTIVE) {
+        var now = System.currentTimeMillis();
+        if (bucket(task, now) == BUCKET_ACTIVE) {
             // 正在下载：不给「继续」「删除」，避免重复启动服务或删掉正在写的 .part
             primary.setText(R.string.notify_cancel);
             primary.setOnClickListener(v -> {
-                DownloadService.requestCancel();
+                if (task.isInstall()) {
+                    InstallService.requestCancel();
+                } else {
+                    DownloadService.requestCancel();
+                }
                 toast(R.string.notify_cancelled);
             });
             deleteButton.setVisibility(View.GONE);
         } else if (DownloadTask.STATE_DONE.equals(task.state)) {
-            primary.setText(R.string.download_open);
-            primary.setOnClickListener(v -> openFile(task));
+            if (task.isInstall()) {
+                // 安装包下完就装掉了，临时文件已删，没有可以「打开」的东西
+                primary.setVisibility(View.GONE);
+            } else {
+                primary.setText(R.string.download_open);
+                primary.setOnClickListener(v -> openFile(task));
+            }
             deleteButton.setOnClickListener(v -> confirmDelete(task));
         } else {
             primary.setText(R.string.resume_action);
@@ -369,6 +405,12 @@ public class DownloadsActivity extends FragmentActivity {
             return;
         }
         progress.setVisibility(View.VISIBLE);
+        if (DownloadTask.STATE_INSTALLING.equals(task.state)) {
+            // 包已经下完，安装本身没有字节进度
+            progress.setIndeterminate(true);
+            progress.setProgress(0);
+            return;
+        }
         if (task.size > 0) {
             progress.setIndeterminate(false);
             progress.setProgress((int) Math.min(100, task.downloaded * 100 / task.size));
@@ -378,25 +420,36 @@ public class DownloadsActivity extends FragmentActivity {
         }
     }
 
-    /** 删除前问一句：只删记录，还是连文件一起删。 */
+    /** 删除前问一句：只删任务，还是连文件一起删。安装包没有留下文件，就只问任务。 */
     private void confirmDelete(DownloadTask task) {
         var done = bucket(task, System.currentTimeMillis()) == BUCKET_DONE;
+        // 只有真正落到 Download 目录的记录才有文件可删
+        var hasFile = done && !task.isInstall() && task.target != null;
         var dialog = CardDialog.create(this);
         dialog.icon(R.drawable.ic_trash)
             .title(R.string.delete_task_title)
-            .message(getString(done ? R.string.delete_task_done_msg
-                : R.string.delete_task_unfinished_msg, task.name));
+            .message(getString(!done ? R.string.delete_task_unfinished_msg
+                : hasFile ? R.string.delete_task_done_msg
+                : R.string.delete_task_no_file_msg, task.name));
         dialog.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> dialog.dismiss());
         dialog.button(getString(R.string.delete_task_only), R.style.Button_Pill_Tonal, v -> {
             dialog.dismiss();
             deleteRecord(task);
         });
-        dialog.button(getString(done ? R.string.delete_task_and_file : R.string.delete_task_and_rest),
-            R.style.Button_Pill_Danger, v -> {
-            dialog.dismiss();
-            deleteWithFile(task, done);
-        });
+        if (hasFile) {
+            dialog.button(getString(R.string.delete_task_and_file),
+                R.style.Button_Pill_Danger, v -> {
+                dialog.dismiss();
+                deleteWithFile(task, true);
+            });
+        } else if (!done) {
+            dialog.button(getString(R.string.delete_task_and_rest),
+                R.style.Button_Pill_Danger, v -> {
+                dialog.dismiss();
+                deleteWithFile(task, false);
+            });
+        }
         dialog.show();
     }
 
@@ -429,12 +482,22 @@ public class DownloadsActivity extends FragmentActivity {
 
     private String metaOf(DownloadTask task) {
         var meta = new StringBuilder();
+        var install = task.isInstall();
         if (DownloadTask.STATE_DONE.equals(task.state)) {
-            meta.append(getString(R.string.downloads_state_done));
+            meta.append(getString(install ? R.string.downloads_state_installed
+                : R.string.downloads_state_done));
             if (task.size > 0) meta.append(" · ").append(Format.size(task.size));
         } else if (DownloadTask.STATE_FAILED.equals(task.state)) {
-            meta.append(getString(R.string.downloads_state_failed));
-            if (task.error != null) meta.append(" · ").append(task.error);
+            if (task.error == null || task.error.isEmpty()) {
+                // 取消 / 中断：不带原因，当「未完成」看
+                meta.append(getString(R.string.downloads_state_interrupted));
+            } else {
+                meta.append(getString(install ? R.string.downloads_state_install_failed
+                    : R.string.downloads_state_failed)).append(" · ").append(task.error);
+            }
+        } else if (DownloadTask.STATE_INSTALLING.equals(task.state)
+            && bucket(task, System.currentTimeMillis()) == BUCKET_ACTIVE) {
+            meta.append(getString(R.string.downloads_state_installing));
         } else if (bucket(task, System.currentTimeMillis()) == BUCKET_ACTIVE) {
             meta.append(getString(R.string.notify_downloading)).append(" · ")
                 .append(Format.size(task.downloaded));

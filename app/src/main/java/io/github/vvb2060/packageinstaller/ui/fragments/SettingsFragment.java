@@ -1,5 +1,6 @@
 package io.github.vvb2060.packageinstaller.ui.fragments;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.os.Handler;
@@ -8,14 +9,12 @@ import android.widget.CheckBox;
 import android.widget.Toast;
 
 import io.github.vvb2060.packageinstaller.R;
-import io.github.vvb2060.packageinstaller.core.KeepAlive;
 import io.github.vvb2060.packageinstaller.core.Privilege;
 import io.github.vvb2060.packageinstaller.installmodel.SettingsUserAction;
-import io.github.vvb2060.packageinstaller.service.KeepAliveService;
 import io.github.vvb2060.packageinstaller.ui.CardDialog;
 import io.github.vvb2060.packageinstaller.ui.InstallLaunch;
 
-/** 设置：安全模式、后台保活、设为默认安装器。 */
+/** 设置：安全模式、设为默认安装器。 */
 public final class SettingsFragment extends BaseDialogFragment {
 
     private final SettingsUserAction mDialogData;
@@ -39,13 +38,6 @@ public final class SettingsFragment extends BaseDialogFragment {
         safeModeBox.setChecked(mDialogData.safeMode);
         card.addContent(safeModeBox);
 
-        var keepAliveBox = new CheckBox(context);
-        keepAliveBox.setText(R.string.keepalive_title);
-        keepAliveBox.setTextSize(13);
-        keepAliveBox.setButtonTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
-        keepAliveBox.setChecked(KeepAlive.isEnabled(context));
-        card.addContent(keepAliveBox);
-
         var defaultBox = new CheckBox(context);
         defaultBox.setText(R.string.default_installer_title);
         defaultBox.setTextSize(13);
@@ -59,34 +51,15 @@ public final class SettingsFragment extends BaseDialogFragment {
             if (safeModeBox.isChecked() != mDialogData.safeMode) {
                 mViewModel.setSafeMode(safeModeBox.isChecked());
             }
-            applyKeepAlive(keepAliveBox.isChecked());
             applyDefaultInstaller(defaultBox.isChecked());
             finishOrDismiss();
-        });
-    }
-
-    private void applyKeepAlive(boolean enabled) {
-        var context = requireContext().getApplicationContext();
-        if (enabled == KeepAlive.isEnabled(context)) return;
-        KeepAlive.setEnabled(context, enabled);
-        if (!enabled) {
-            KeepAliveService.stop(context);
-            runAction(KeepAlive::stopRootWatchdog);
-            toast(R.string.keepalive_off);
-            return;
-        }
-        KeepAliveService.start(context);
-        toast(R.string.keepalive_on);
-        runAction(() -> {
-            if (Privilege.modeOrUnknown() != Privilege.MODE_ROOT) return;
-            KeepAlive.applyRootTweaks(context);
-            KeepAlive.startRootWatchdog(context);
         });
     }
 
     /** 勾上就设为默认（需要特权），取消勾选就清掉偏好回到系统默认。 */
     private void applyDefaultInstaller(boolean enabled) {
         if (enabled == Privilege.isDefaultInstaller()) return;
+        var appContext = requireContext().getApplicationContext();
         if (!enabled) {
             var error = Privilege.clearDefaultInstaller();
             toast(error == null ? R.string.default_cleared
@@ -94,39 +67,37 @@ public final class SettingsFragment extends BaseDialogFragment {
             return;
         }
         if (Privilege.modeOrUnknown() == Privilege.MODE_NONE) {
-            showChooser();
+            showChooser(appContext);
             return;
         }
         runAction(() -> {
             var error = Privilege.makeDefaultInstaller();
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (!isAdded()) return;
-                Toast.makeText(requireContext(),
-                    error == null ? getString(R.string.default_done)
-                        : getString(R.string.result_failed, error),
+                // 对话框这时已经关掉了，不能用 fragment 的 context
+                Toast.makeText(appContext,
+                    error == null ? appContext.getString(R.string.default_done)
+                        : appContext.getString(R.string.result_failed, error),
                     Toast.LENGTH_LONG).show();
-                if (error != null) showChooser();
+                if (error != null) showChooser(appContext);
             });
         });
     }
 
-    private void showChooser() {
+    private static void showChooser(Context context) {
         var intent = new Intent(Intent.ACTION_VIEW)
             .setType("application/vnd.android.package-archive")
-            .putExtra(InstallLaunch.EXTRA_SET_DEFAULT, true);
+            .putExtra(InstallLaunch.EXTRA_SET_DEFAULT, true)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
-            startActivity(Intent.createChooser(intent,
-                getString(R.string.default_chooser_title)));
+            context.startActivity(Intent.createChooser(intent,
+                    context.getString(R.string.default_chooser_title))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (RuntimeException e) {
-            toast(R.string.default_chooser_failed);
+            Toast.makeText(context, R.string.default_chooser_failed, Toast.LENGTH_SHORT).show();
         }
     }
 
     private void toast(int resId) {
         Toast.makeText(requireContext(), resId, Toast.LENGTH_SHORT).show();
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }

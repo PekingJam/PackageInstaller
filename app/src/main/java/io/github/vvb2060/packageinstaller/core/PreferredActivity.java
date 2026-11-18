@@ -16,6 +16,7 @@ import android.util.LogPrinter;
 import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 import io.github.vvb2060.packageinstaller.BuildConfig;
@@ -111,19 +112,39 @@ public class PreferredActivity {
             .build();
     }
 
-    /** 当前能处理 APK 的应用组件集合（Root 子进程只负责按这个集合写偏好）。 */
+    /**
+     * 当前能处理 APK 的应用组件集合（Root 子进程只负责按这个集合写偏好）。
+     *
+     * 系统在解析时会要求「当前候选集合」与这里写入的集合完全一致，否则整条偏好被丢弃。
+     * 而不同来源的安装 intent 带的 data 不一样（content://、file://、无 data），
+     * 各组件声明的 scheme 也不一样，所以这里必须取所有形状的并集，宁多勿少。
+     */
     private static ComponentName[] matchingComponents(PackageManager pm) {
-        var intent = new Intent(Intent.ACTION_VIEW)
-            .addCategory(Intent.CATEGORY_DEFAULT)
-            .setDataAndType(dummyUri(), PACKAGE_MIME_TYPE);
-        var infos = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
-        var list = new ArrayList<ComponentName>();
-        for (var info : infos) {
-            var activityInfo = info.activityInfo;
-            if (activityInfo == null) continue;
-            list.add(new ComponentName(activityInfo.packageName, activityInfo.name));
+        var found = new LinkedHashMap<String, ComponentName>();
+        String[] actions = {Intent.ACTION_VIEW, Intent.ACTION_INSTALL_PACKAGE};
+        String[] uris = {
+            "content://" + BuildConfig.APPLICATION_ID + "/base.apk",
+            "file:///sdcard/base.apk",
+            "package:" + BuildConfig.APPLICATION_ID,
+            null,
+        };
+        for (var action : actions) {
+            for (var uri : uris) {
+                var intent = new Intent(action).addCategory(Intent.CATEGORY_DEFAULT);
+                if (uri == null) {
+                    intent.setType(PACKAGE_MIME_TYPE);
+                } else {
+                    intent.setDataAndType(Uri.parse(uri), PACKAGE_MIME_TYPE);
+                }
+                for (var info : pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)) {
+                    var activityInfo = info.activityInfo;
+                    if (activityInfo == null) continue;
+                    var component = new ComponentName(activityInfo.packageName, activityInfo.name);
+                    found.putIfAbsent(component.flattenToString(), component);
+                }
+            }
         }
-        return list.toArray(new ComponentName[0]);
+        return found.values().toArray(new ComponentName[0]);
     }
 
     /**
