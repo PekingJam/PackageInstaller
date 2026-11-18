@@ -169,10 +169,14 @@ public final class DownloadTask {
             }
         }
         var file = new File(context.getFilesDir(), FILE_NAME);
-        try (var out = new FileOutputStream(file)) {
+        var temp = new File(context.getFilesDir(), FILE_NAME + ".tmp");
+        try (var out = new FileOutputStream(temp)) {
             out.write(array.toString().getBytes(StandardCharsets.UTF_8));
+            out.getFD().sync();
         } catch (Exception e) {
             Log.w(TAG, "write tasks failed", e);
+            return;
         }
+        if (!temp.renameTo(file)) Log.w(TAG, "rename tasks failed");
     }
 }

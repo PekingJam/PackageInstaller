@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -19,7 +20,10 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -43,6 +47,22 @@ public class DownloadsActivity extends FragmentActivity {
     private CardDialog confirmDialog;
     private boolean probing;
 
+    private ScrollView scroll;
+    private final Map<String, View> rowsById = new HashMap<>();
+    private String lastSignature = "";
+    private boolean loading;
+
+    /** 列表页的进度跟随下载服务：每 800ms 读一次任务文件，只刷新变化的文字。 */
+    private boolean hasActive;
+
+    private final Runnable ticker = new Runnable() {
+        @Override
+        public void run() {
+            reload();
+            main.postDelayed(this, hasActive ? 800 : 3000);
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -51,6 +71,7 @@ public class DownloadsActivity extends FragmentActivity {
         container = findViewById(R.id.download_list);
         empty = findViewById(R.id.download_empty);
         findViewById(R.id.btn_back).setOnClickListener(v -> finish());
+        scroll = findViewById(R.id.download_scroll);
         input = findViewById(R.id.download_input);
         findViewById(R.id.download_add).setOnClickListener(v -> submit());
         input.setOnEditorActionListener((v, actionId, event) -> {
@@ -167,21 +188,33 @@ public class DownloadsActivity extends FragmentActivity {
     protected void onResume() {
         super.onResume();
         reload();
+        main.removeCallbacks(ticker);
+        main.postDelayed(ticker, 800);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        main.removeCallbacks(ticker);
     }
 
     @Override
     protected void onDestroy() {
         if (confirmDialog != null) confirmDialog.dismiss();
+        main.removeCallbacks(ticker);
         main.removeCallbacksAndMessages(null);
         executor.shutdownNow();
         super.onDestroy();
     }
 
     private void reload() {
+        if (loading) return;
+        loading = true;
         executor.execute(() -> {
             var tasks = DownloadTask.all(this);
             var pending = ResumableDownload.pending(this);
             main.post(() -> {
+                loading = false;
                 if (isDestroyed()) return;
                 render(tasks, pending);
             });
@@ -189,19 +222,28 @@ public class DownloadsActivity extends FragmentActivity {
     }
 
     private void render(List<DownloadTask> tasks, List<ResumableDownload.Pending> pending) {
+        var signature = signature(tasks, pending);
+        if (signature.equals(lastSignature)) {
+            // 结构没变（还在下载中），只就地更新进度文字，不重建视图
+            for (var task : tasks) {
+                var row = rowsById.get(task.id);
+                if (row != null) ((TextView) row.findViewById(R.id.download_meta)).setText(metaOf(task));
+            }
+            return;
+        }
+        lastSignature = signature;
+        rowsById.clear();
+        var scrollY = scroll == null ? 0 : scroll.getScrollY();
         container.removeAllViews();
         var now = System.currentTimeMillis();
         var active = new ArrayList<DownloadTask>();
         var unfinished = new ArrayList<DownloadTask>();
         var done = new ArrayList<DownloadTask>();
         for (var task : tasks) {
-            if (DownloadTask.STATE_DONE.equals(task.state)) {
-                done.add(task);
-            } else if (DownloadTask.STATE_ACTIVE.equals(task.state)
-                && now - task.updatedAt < 20_000L) {
-                active.add(task);
-            } else {
-                unfinished.add(task);
+            switch (bucket(task, now)) {
+                case BUCKET_ACTIVE -> active.add(task);
+                case BUCKET_DONE -> done.add(task);
+                default -> unfinished.add(task);
             }
         }
 
@@ -216,10 +258,43 @@ public class DownloadsActivity extends FragmentActivity {
         var total = active.size() + unfinished.size() + done.size() + orphans.size();
         empty.setVisibility(total == 0 ? View.VISIBLE : View.GONE);
 
+        hasActive = !active.isEmpty() || !orphans.isEmpty();
         addSection(R.string.downloads_section_active, active);
         addSection(R.string.downloads_section_unfinished, unfinished);
         for (var item : orphans) addOrphan(item);
         addSection(R.string.downloads_section_done, done);
+
+        if (scroll != null) {
+            main.post(() -> scroll.scrollTo(0, Math.min(scrollY, scroll.getChildAt(0) == null
+                ? 0 : Math.max(0, scroll.getChildAt(0).getHeight() - scroll.getHeight()))));
+        }
+    }
+
+    /** 只反映结构：分组归属 + 状态；进度变化不算，免得每 800ms 重建一次。 */
+    private String signature(List<DownloadTask> tasks, List<ResumableDownload.Pending> pending) {
+        var builder = new StringBuilder();
+        var known = new HashSet<String>();
+        for (var task : tasks) {
+            known.add(task.url);
+            builder.append(task.id).append(':').append(bucket(task, System.currentTimeMillis()))
+                .append(';');
+        }
+        for (var item : pending) {
+            if (!known.contains(item.url)) builder.append('p').append(item.url).append(';');
+        }
+        return builder.toString();
+    }
+
+    private static final int BUCKET_ACTIVE = 0;
+    private static final int BUCKET_UNFINISHED = 1;
+    private static final int BUCKET_DONE = 2;
+
+    private static int bucket(DownloadTask task, long now) {
+        if (DownloadTask.STATE_DONE.equals(task.state)) return BUCKET_DONE;
+        if (DownloadTask.STATE_ACTIVE.equals(task.state) && now - task.updatedAt < 20_000L) {
+            return BUCKET_ACTIVE;
+        }
+        return BUCKET_UNFINISHED;
     }
 
     private void addSection(int titleRes, List<DownloadTask> items) {
@@ -235,6 +310,32 @@ public class DownloadsActivity extends FragmentActivity {
         var row = getLayoutInflater().inflate(R.layout.item_download, container, false);
         ((TextView) row.findViewById(R.id.download_name)).setText(task.name);
 
+        ((TextView) row.findViewById(R.id.download_meta)).setText(metaOf(task));
+        rowsById.put(task.id, row);
+
+        var primary = (TextView) row.findViewById(R.id.download_primary);
+        var deleteButton = (TextView) row.findViewById(R.id.download_delete);
+        if (bucket(task, System.currentTimeMillis()) == BUCKET_ACTIVE) {
+            // 正在下载：不给「继续」「删除」，避免重复启动服务或删掉正在写的 .part
+            primary.setText(R.string.notify_cancel);
+            primary.setOnClickListener(v -> {
+                DownloadService.requestCancel();
+                toast(R.string.notify_cancelled);
+            });
+            deleteButton.setVisibility(View.GONE);
+        } else if (DownloadTask.STATE_DONE.equals(task.state)) {
+            primary.setText(R.string.download_open);
+            primary.setOnClickListener(v -> openFile(task));
+            deleteButton.setOnClickListener(v -> delete(task));
+        } else {
+            primary.setText(R.string.resume_action);
+            primary.setOnClickListener(v -> resume(task));
+            deleteButton.setOnClickListener(v -> delete(task));
+        }
+        container.addView(row);
+    }
+
+    private String metaOf(DownloadTask task) {
         var meta = new StringBuilder();
         if (DownloadTask.STATE_DONE.equals(task.state)) {
             meta.append(getString(R.string.downloads_state_done));
@@ -249,19 +350,7 @@ public class DownloadsActivity extends FragmentActivity {
                     .append(" · ").append((int) (task.downloaded * 100 / task.size)).append('%');
             }
         }
-        ((TextView) row.findViewById(R.id.download_meta)).setText(meta.toString());
-
-        var primary = (TextView) row.findViewById(R.id.download_primary);
-        if (DownloadTask.STATE_DONE.equals(task.state)) {
-            primary.setText(R.string.download_open);
-            primary.setOnClickListener(v -> openFile(task));
-        } else {
-            primary.setText(R.string.resume_action);
-            primary.setOnClickListener(v -> resume(task));
-        }
-        ((TextView) row.findViewById(R.id.download_delete))
-            .setOnClickListener(v -> delete(task));
-        container.addView(row);
+        return meta.toString();
     }
 
     private void addOrphan(ResumableDownload.Pending item) {
