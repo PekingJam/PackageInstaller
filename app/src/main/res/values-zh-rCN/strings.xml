@@ -206,8 +206,11 @@
     <string name="downloads_state_installing">正在安装</string>
     <string name="downloads_state_install_failed">安装失败</string>
     <string name="downloads_state_interrupted">已中断</string>
+    <string name="downloads_state_paused">已暂停</string>
     <string name="download_open">打开</string>
     <string name="download_delete">删除</string>
+    <string name="download_pause">暂停</string>
+    <string name="download_paused">已暂停，可以随时继续</string>
     <string name="download_detail">查看详情</string>
     <string name="download_link_copied">链接已复制</string>
     <string name="download_detail_link">原始链接（点一下复制）</string>

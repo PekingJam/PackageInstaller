@@ -46,6 +46,7 @@ public class DownloadService extends Service {
     private static final int RESULT_ID = 0x5202;
 
     private static volatile boolean cancelRequested;
+    private static volatile boolean pauseRequested;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -62,6 +63,12 @@ public class DownloadService extends Service {
     }
 
     public static void requestCancel() {
+        cancelRequested = true;
+    }
+
+    /** 暂停：停掉当前下载但保留 .part，任务标成「已暂停」，之后可以继续。 */
+    public static void requestPause() {
+        pauseRequested = true;
         cancelRequested = true;
     }
 
@@ -90,6 +97,7 @@ public class DownloadService extends Service {
             return START_NOT_STICKY;
         }
         cancelRequested = false;
+        pauseRequested = false;
         startForeground(PROGRESS_ID, notification(getString(R.string.notify_downloading),
             intent.getStringExtra(EXTRA_NAME), -1, null, true));
         executor.execute(() -> download(intent, startId));
@@ -163,6 +171,12 @@ public class DownloadService extends Service {
             finish(startId);
         } catch (Throwable e) {
             Log.e(TAG, "download failed", e);
+            if (pauseRequested) {
+                // 用户暂停：不写错误原因，任务保留成「已暂停」，.part 留着能继续
+                DownloadTask.setState(this, id, DownloadTask.STATE_PAUSED, null, null, -1, -1);
+                finish(startId);
+                return;
+            }
             var cancelled = cancelRequested;
             var reason = cancelled ? getString(R.string.notify_cancelled) : String.valueOf(e);
             DownloadTask.setState(this, id, DownloadTask.STATE_FAILED, null, reason, -1, -1);

@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,6 +12,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -384,13 +386,64 @@ public class DownloadsActivity extends FragmentActivity {
 
         ((TextView) row.findViewById(R.id.download_meta)).setText(metaOf(task));
         applyProgress((android.widget.ProgressBar) row.findViewById(R.id.download_progress), task);
+        applyIcon(row, task);
         rowsById.put(task.id, row);
 
-        // 一律两个按钮：查看详情 + 删除。打开 / 继续 / 取消下载都在详情里
+        // 一律两个按钮：查看详情 + 删除（下载中的第二格换成暂停）。打开 / 继续 / 取消都在详情里
         row.findViewById(R.id.download_detail).setOnClickListener(v -> showDetail(task));
-        row.findViewById(R.id.download_delete).setOnClickListener(v -> confirmDelete(task));
+        var secondary = (TextView) row.findViewById(R.id.download_delete);
+        if (bucket(task, System.currentTimeMillis()) == BUCKET_ACTIVE) {
+            secondary.setText(R.string.download_pause);
+            secondary.setOnClickListener(v -> pause(task));
+        } else {
+            secondary.setText(R.string.download_delete);
+            secondary.setOnClickListener(v -> confirmDelete(task));
+        }
         row.setOnClickListener(v -> showDetail(task));
         container.addView(row);
+    }
+
+    /** 按文件类型给图标；拿不到类型就退回通用文件图标。 */
+    private void applyIcon(View row, DownloadTask task) {
+        var icon = (ImageView) row.findViewById(R.id.download_icon);
+        if (icon == null) return;
+        icon.setImageResource(iconFor(task));
+        icon.setImageTintList(ColorStateList.valueOf(getColor(R.color.ui_on_surface_variant)));
+    }
+
+    private static int iconFor(DownloadTask task) {
+        var name = task.name == null ? "" : task.name.toLowerCase(Locale.ROOT);
+        var mime = task.mime == null ? "" : task.mime.toLowerCase(Locale.ROOT);
+        if (task.looksLikeApk()) return R.drawable.ic_file_apk;
+        if (mime.startsWith("image/") || name.matches(".*\\.(jpg|jpeg|png|gif|webp|bmp|heic)$")) {
+            return R.drawable.ic_file_image;
+        }
+        if (mime.startsWith("video/") || name.matches(".*\\.(mp4|mkv|mov|avi|webm|flv|ts)$")) {
+            return R.drawable.ic_file_video;
+        }
+        if (mime.startsWith("audio/") || name.matches(".*\\.(mp3|flac|wav|m4a|aac|ogg|ape)$")) {
+            return R.drawable.ic_file_audio;
+        }
+        if (mime.contains("pdf") || name.endsWith(".pdf")) return R.drawable.ic_file_pdf;
+        if (mime.contains("zip") || mime.contains("rar") || mime.contains("compressed")
+            || name.matches(".*\\.(zip|rar|7z|tar|gz|xz|bz2)$")) {
+            return R.drawable.ic_file_zip;
+        }
+        if (mime.startsWith("text/") || name.matches(".*\\.(txt|md|log|json|xml|csv|ini)$")) {
+            return R.drawable.ic_file_text;
+        }
+        return R.drawable.ic_file_generic;
+    }
+
+    /** 暂停：停掉下载但保留 .part，任务变成「已中断」，随时可以继续。 */
+    private void pause(DownloadTask task) {
+        if (task.isInstall()) {
+            InstallService.requestPause();
+        } else {
+            DownloadService.requestPause();
+        }
+        toast(R.string.download_paused);
+        main.postDelayed(this::reload, 600);
     }
 
     private void applyProgress(android.widget.ProgressBar progress, DownloadTask task) {
@@ -495,6 +548,11 @@ public class DownloadsActivity extends FragmentActivity {
             meta.append(getString(install ? R.string.downloads_state_installed
                 : R.string.downloads_state_done));
             if (task.size > 0) meta.append(" · ").append(Format.size(task.size));
+        } else if (DownloadTask.STATE_PAUSED.equals(task.state)) {
+            meta.append(getString(R.string.downloads_state_paused));
+            if (task.size > 0) {
+                meta.append(" · ").append((int) (task.downloaded * 100 / task.size)).append('%');
+            }
         } else if (DownloadTask.STATE_FAILED.equals(task.state)) {
             if (task.error == null || task.error.isEmpty()) {
                 // 取消 / 中断：不带原因，当「未完成」看
@@ -532,6 +590,7 @@ public class DownloadsActivity extends FragmentActivity {
         var task = new DownloadTask(DownloadTask.idOf(item.url), item.url, item.label,
             DownloadProbe.mimeFromName(item.label), DownloadTask.STATE_FAILED);
         task.downloaded = item.downloaded;
+        applyIcon(row, task);
         row.findViewById(R.id.download_detail).setOnClickListener(v -> showDetail(task));
         row.findViewById(R.id.download_delete).setOnClickListener(v -> executor.execute(() -> {
             ResumableDownload.delete(this, item.url);

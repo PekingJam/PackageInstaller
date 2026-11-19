@@ -62,6 +62,7 @@ public class InstallService extends Service {
     private static final int RESULT_ID = 0x5102;
 
     private static volatile boolean cancelRequested;
+    private static volatile boolean pauseRequested;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -98,6 +99,12 @@ public class InstallService extends Service {
         cancelRequested = true;
     }
 
+    /** 暂停：停掉下载阶段但保留 .part，任务标成「已暂停」，之后可以继续。 */
+    public static void requestPause() {
+        pauseRequested = true;
+        cancelRequested = true;
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -123,6 +130,7 @@ public class InstallService extends Service {
             return START_NOT_STICKY;
         }
         cancelRequested = false;
+        pauseRequested = false;
         startForeground(PROGRESS_ID, progressNotification(
             getString(R.string.notify_preparing), null, -1, true));
         executor.execute(() -> install(intent, startId));
@@ -249,10 +257,12 @@ public class InstallService extends Service {
                 });
         } catch (Throwable e) {
             Log.e(TAG, "install failed", e);
+            var paused = pauseRequested;
             var reason = cancelRequested ? getString(R.string.notify_cancelled) : e.toString();
             if (taskId != null) {
-                // 取消 / 中断不写错误原因：列表里算「未完成」，可以点继续
-                DownloadTask.setState(this, taskId, DownloadTask.STATE_FAILED, null,
+                // 取消 / 中断 / 暂停都不写错误原因：列表里算「未完成」，可以点继续
+                DownloadTask.setState(this, taskId,
+                    paused ? DownloadTask.STATE_PAUSED : DownloadTask.STATE_FAILED, null,
                     cancelRequested ? null : reason, -1, -1);
             }
             if (cancelRequested) {

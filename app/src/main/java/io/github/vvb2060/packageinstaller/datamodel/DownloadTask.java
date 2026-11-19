@@ -26,6 +26,8 @@ public final class DownloadTask {
     public static final String STATE_INSTALLING = "installing";
     public static final String STATE_DONE = "done";
     public static final String STATE_FAILED = "failed";
+    /** 用户主动点了暂停：和「中断」区分开，文案更准确，仍然可以继续。 */
+    public static final String STATE_PAUSED = "paused";
 
     /** 普通文件下载，完成后落在系统 Download 目录。 */
     public static final String KIND_SAVE = "save";
