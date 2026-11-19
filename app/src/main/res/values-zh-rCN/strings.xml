@@ -57,6 +57,7 @@
 
     <string name="error_title">错误</string>
     <string name="error_parse">解析软件包时出现问题。</string>
+    <string name="install_nothing_to_install">没有可安装的内容（链接或文件为空）。</string>
     <string name="error_split">缺失匹配的基础包。</string>
     <string name="error_notfound">在已安装应用列表中找不到该应用。</string>
     <string name="error_shizuku_notfound">Shizuku 未安装。</string>

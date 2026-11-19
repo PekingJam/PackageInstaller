@@ -209,6 +209,11 @@ public class InstallViewModel extends AndroidViewModel {
                 }
             }
             if ("http".equals(scheme) || "https".equals(scheme)) return uri.toString();
+            // 旧版链接快递的 pium:// 转交：真实链接在 url extra 里
+            if ("pium".equals(scheme)) {
+                var decoded = unpackUrl(intent.getStringExtra("url"));
+                if (decoded != null) return decoded;
+            }
         }
         // 分享过来的往往是「标题 + 链接」甚至一段话，取里面第一段链接
         return Urls.first(intent.getStringExtra(Intent.EXTRA_TEXT));

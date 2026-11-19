@@ -23,6 +23,7 @@ import java.net.URI;
 
 import javax.net.ssl.SSLContext;
 
+import io.github.vvb2060.packageinstaller.R;
 import io.github.vvb2060.packageinstaller.apk.ApkLite;
 import io.github.vvb2060.packageinstaller.apk.ZipParser;
 import io.github.vvb2060.packageinstaller.apksig.Block;
@@ -113,6 +114,15 @@ public class InstallRepository implements Closeable {
                 installResult.postValue(processUrl(uri.toString()));
                 return;
             }
+            if ("pium".equals(scheme)) {
+                // 旧版链接快递的转交形式：真实链接在 url extra 里（URL-safe base64）
+                var packed = intent.getStringExtra("url");
+                var unpacked = packed == null ? null : unpackUrl(packed);
+                if (unpacked != null) {
+                    installResult.postValue(processUrl(unpacked));
+                    return;
+                }
+            }
         }
         var packageName = intent.getStringExtra(Intent.EXTRA_PACKAGE_NAME);
         if (packageName != null) {
@@ -125,7 +135,23 @@ public class InstallRepository implements Closeable {
             installResult.postValue(processUrl(first != null ? first : url.trim()));
             return;
         }
-        installResult.postValue(new SettingsUserAction(safeMode));
+        // 兜底：收到一个什么内容都没有的 intent（例如浏览器把参数丢光了）。
+        // 以前这里会弹设置界面，看起来像「点链接打开了设置」，纯属误导 —— 改成明确报错。
+        installResult.postValue(new InstallAborted(InstallAborted.ABORT_PARSE,
+            context.getString(R.string.install_nothing_to_install)));
+    }
+
+    /** 解开 pium:// 携带的链接；不是 base64 时按明文处理。 */
+    private static String unpackUrl(String value) {
+        try {
+            var builder = new StringBuilder(value.replace('-', '+').replace('_', '/'));
+            while (builder.length() % 4 != 0) builder.append('=');
+            var text = new String(android.util.Base64.decode(builder.toString(),
+                android.util.Base64.DEFAULT), java.nio.charset.StandardCharsets.UTF_8);
+            if (text.startsWith("http://") || text.startsWith("https://")) return text;
+        } catch (RuntimeException ignored) {
+        }
+        return value.startsWith("http://") || value.startsWith("https://") ? value : null;
     }
 
     /**

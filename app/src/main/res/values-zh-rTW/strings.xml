@@ -57,6 +57,7 @@
 
     <string name="error_title">錯誤</string>
     <string name="error_parse">解析套件時發生問題。</string>
+    <string name="install_nothing_to_install">沒有可安裝的內容（連結或檔案為空）。</string>
     <string name="error_split">找不到相符的基礎套件。</string>
     <string name="error_notfound">在已安裝的應用程式清單中找不到此應用程式。</string>
     <string name="error_shizuku_notfound">尚未安裝 Shizuku。</string>

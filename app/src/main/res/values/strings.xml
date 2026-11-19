@@ -57,6 +57,7 @@
 
     <string name="error_title">Error</string>
     <string name="error_parse">There was a problem parsing the package.</string>
+    <string name="install_nothing_to_install">Nothing to install: the link or file is missing.</string>
     <string name="error_split">Missing matching base package.</string>
     <string name="error_notfound">The app wasn\'t found in the list of installed apps.</string>
     <string name="error_shizuku_notfound">Shizuku is not installed.</string>
