@@ -206,6 +206,10 @@ public class InstallService extends Service {
             var parser = new ZipParser(dataSource);
             var apk = parser.parse();
             var name = apk.getLabel();
+            // 解析出包名就记下来，列表里能直接拿系统应用图标
+            if (taskId != null) {
+                DownloadTask.setPackageName(InstallService.this, taskId, apk.packageName);
+            }
             updateProgress(getString(R.string.notify_installing), name, -1, null);
 
             var full = intent.getBooleanExtra(EXTRA_FULL, true);

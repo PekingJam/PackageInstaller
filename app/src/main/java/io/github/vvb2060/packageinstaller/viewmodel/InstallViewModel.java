@@ -310,6 +310,8 @@ public class InstallViewModel extends AndroidViewModel {
                         ParcelFileDescriptor.MODE_READ_ONLY)) {
                         var fileParser = new ZipParser(FileDataSource.asDataSource(pfd));
                         var fileApk = fileParser.parse();
+                        // 解析出包名先记下来：列表里能取真实应用图标，即使安装把自己进程杀掉
+                        DownloadTask.setPackageName(getApplication(), taskId, fileApk.packageName);
                         installResult.postValue(new InstallInstalling(fileApk, false));
                         runInstall(fileApk, fileParser, setInstaller, full, taskId);
                     } finally {
@@ -361,6 +363,7 @@ public class InstallViewModel extends AndroidViewModel {
                 @Override
                 public void onSuccess() {
                     if (taskId != null) {
+                        DownloadTask.setPackageName(getApplication(), taskId, apk.packageName);
                         DownloadTask.setState(getApplication(), taskId,
                             DownloadTask.STATE_DONE, null, null, -1, -1);
                     }

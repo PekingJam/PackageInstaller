@@ -5,6 +5,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -31,13 +33,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.apk.ZipParser;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadProbe;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadStore;
 import io.github.vvb2060.packageinstaller.datamodel.DownloadTask;
+import io.github.vvb2060.packageinstaller.datamodel.FileDataSource;
 import io.github.vvb2060.packageinstaller.datamodel.ResumableDownload;
 import io.github.vvb2060.packageinstaller.service.DownloadService;
 import io.github.vvb2060.packageinstaller.service.InstallService;
@@ -57,6 +62,8 @@ public class DownloadsActivity extends FragmentActivity {
 
     private ScrollView scroll;
     private final Map<String, View> rowsById = new HashMap<>();
+    private final Map<String, Drawable> iconCache = new HashMap<>();
+    private final Set<String> iconTried = new HashSet<>();
     private String lastSignature = "";
     private boolean loading;
 
@@ -407,8 +414,58 @@ public class DownloadsActivity extends FragmentActivity {
     private void applyIcon(View row, DownloadTask task) {
         var icon = (ImageView) row.findViewById(R.id.download_icon);
         if (icon == null) return;
+        var cached = iconCache.get(task.id);
+        if (cached != null) {
+            icon.setImageDrawable(cached);
+            icon.setImageTintList(null);
+            return;
+        }
+        // 已装应用的图标最准：解析出过包名就直接问系统要
+        if (task.packageName != null && !task.packageName.isEmpty()) {
+            try {
+                var appIcon = getPackageManager().getApplicationIcon(task.packageName);
+                if (appIcon != null) {
+                    iconCache.put(task.id, appIcon);
+                    icon.setImageDrawable(appIcon);
+                    icon.setImageTintList(null);
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+        }
         icon.setImageResource(iconFor(task));
         icon.setImageTintList(ColorStateList.valueOf(getColor(R.color.ui_on_surface_variant)));
+        // 本地还留着 APK 的，从包里把 launcher 图标抠出来（异步，拿到会覆盖类型图标）
+        if (task.target != null && !task.target.isEmpty() && task.looksLikeApk()
+            && iconTried.add(task.id)) {
+            loadApkIcon(task);
+        }
+    }
+
+    /** 从本地 APK 文件里取应用图标；失败就保持类型图标。 */
+    private void loadApkIcon(DownloadTask task) {
+        executor.execute(() -> {
+            Drawable drawable = null;
+            try (var pfd = getContentResolver().openFileDescriptor(Uri.parse(task.target), "r")) {
+                if (pfd != null) {
+                    var parser = new ZipParser(FileDataSource.asDataSource(pfd));
+                    drawable = parser.parse().getIcon();
+                }
+            } catch (Exception | LinkageError ignored) {
+            }
+            if (drawable == null) return;
+            final var loaded = drawable;
+            main.post(() -> {
+                iconCache.put(task.id, loaded);
+                var row = rowsById.get(task.id);
+                if (row == null) return;
+                var iv = (ImageView) row.findViewById(R.id.download_icon);
+                if (iv != null) {
+                    iv.setImageDrawable(loaded);
+                    iv.setImageTintList(null);
+                }
+            });
+        });
     }
 
     private static int iconFor(DownloadTask task) {
@@ -616,7 +673,15 @@ public class DownloadsActivity extends FragmentActivity {
      */
     private void showDetail(DownloadTask task) {
         var dialog = CardDialog.create(this);
-        dialog.icon(R.drawable.ic_download).title(task.name);
+        var detailIcon = iconCache.get(task.id);
+        if (detailIcon != null) {
+            dialog.icon(detailIcon);
+        } else {
+            var typeIcon = getDrawable(iconFor(task)).mutate();
+            typeIcon.setTint(getColor(R.color.ui_on_surface_variant));
+            dialog.icon(typeIcon);
+        }
+        dialog.title(task.name);
 
         var info = new StringBuilder(metaOf(task));
         if (task.updatedAt > 0) {

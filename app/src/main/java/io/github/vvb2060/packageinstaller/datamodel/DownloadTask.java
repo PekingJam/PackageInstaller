@@ -45,6 +45,8 @@ public final class DownloadTask {
     public String state;
     public String target;
     public String error;
+    /** 解析出来的包名（安装包类任务），用来取真实的应用图标。 */
+    public String packageName;
 
     public DownloadTask(String id, String url, String name, String mime, String state) {
         this.id = id;
@@ -78,6 +80,7 @@ public final class DownloadTask {
         json.put("state", state);
         json.put("target", target);
         json.put("error", error);
+        json.put("packageName", packageName);
         return json;
     }
 
@@ -91,6 +94,7 @@ public final class DownloadTask {
         task.kind = kind.isEmpty() ? KIND_SAVE : kind;
         task.target = json.optString("target", null);
         task.error = json.optString("error", null);
+        task.packageName = json.optString("packageName", null);
         return task;
     }
 
@@ -179,6 +183,21 @@ public final class DownloadTask {
                 if (downloaded >= 0) item.downloaded = downloaded;
                 if (size > 0) item.size = size;
                 item.updatedAt = System.currentTimeMillis();
+                write(context, list);
+                return;
+            }
+        }
+    }
+
+    /** 记录解析出来的包名，列表里就能用系统应用图标。 */
+    public static void setPackageName(Context context, String id, String packageName) {
+        if (packageName == null || packageName.isEmpty()) return;
+        synchronized (LOCK) {
+            var list = all(context);
+            for (var item : list) {
+                if (!item.id.equals(id)) continue;
+                if (packageName.equals(item.packageName)) return;
+                item.packageName = packageName;
                 write(context, list);
                 return;
             }
