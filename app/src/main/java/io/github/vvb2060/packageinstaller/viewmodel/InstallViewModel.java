@@ -199,6 +199,15 @@ public class InstallViewModel extends AndroidViewModel {
         var uri = intent.getData();
         if (uri != null) {
             var scheme = uri.getScheme();
+            // App Link 转交：https://dl.889969.xyz/pium/?u=<base64url 的真实链接>
+            if ("https".equals(scheme) && "dl.889969.xyz".equals(uri.getHost())
+                && uri.getPath() != null && uri.getPath().startsWith("/pium/")) {
+                var packedLink = uri.getQueryParameter("u");
+                if (packedLink != null) {
+                    var decoded = unpackUrl(packedLink);
+                    if (decoded != null) return decoded;
+                }
+            }
             if ("http".equals(scheme) || "https".equals(scheme)) return uri.toString();
         }
         // 分享过来的往往是「标题 + 链接」甚至一段话，取里面第一段链接

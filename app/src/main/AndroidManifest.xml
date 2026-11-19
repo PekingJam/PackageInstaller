@@ -63,6 +63,29 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true"
             android:theme="@style/Theme.AlertDialogActivity">
+            <!-- 链接快递转交（SEND 形式）：自定义 MIME 只有本应用声明，
+                 Chromium 会丢掉 intent 的 package，靠 MIME 唯一性反而更稳 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="application/x-pium-handoff" />
+            </intent-filter>
+            <!-- 链接快递转交：已验证的 App Link。浏览器里点
+                 https://dl.889969.xyz/pium/?u=... 时由系统直接交给本应用，
+                 不弹「选择活动」（intent:// 的 package 参数会被浏览器丢掉） -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="dl.889969.xyz"
+                    android:pathPrefix="/pium/"
+                    android:scheme="https" />
+            </intent-filter>
             <!-- 链接快递转交入口：pium:// 只有本应用声明，浏览器声明了 http/https
                  也不会跟进来，系统不会再弹「选择活动」 -->
             <intent-filter>

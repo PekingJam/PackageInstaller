@@ -63,6 +63,11 @@ public final class RequestHeaders {
         String raw;
         try {
             raw = intent.getStringExtra(EXTRA);
+            if (raw == null) {
+                // App Link 转交时没有 extra，头部信息在 query 的 h 参数里
+                var data = intent.getData();
+                if (data != null) raw = data.getQueryParameter("h");
+            }
         } catch (RuntimeException e) {
             return;
         }

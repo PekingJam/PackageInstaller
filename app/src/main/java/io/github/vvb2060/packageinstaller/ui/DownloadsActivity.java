@@ -560,10 +560,6 @@ public class DownloadsActivity extends FragmentActivity {
         dialog.icon(R.drawable.ic_download).title(task.name);
 
         var info = new StringBuilder(metaOf(task));
-        if (task.target != null && !task.target.isEmpty()) {
-            info.append('\n').append(getString(R.string.download_field_path,
-                DownloadStore.displayPath(task.name)));
-        }
         if (task.updatedAt > 0) {
             info.append('\n').append(new SimpleDateFormat("yyyy-MM-dd HH:mm",
                 Locale.getDefault()).format(new Date(task.updatedAt)));
@@ -581,6 +577,9 @@ public class DownloadsActivity extends FragmentActivity {
         link.setTextSize(11.5f);
         link.setTextColor(getColor(R.color.ui_primary));
         link.setTextIsSelectable(true);
+        // 长直链（带 token）会撑满整个弹窗，限制 4 行；点一下复制的是完整链接
+        link.setMaxLines(4);
+        link.setEllipsize(android.text.TextUtils.TruncateAt.END);
         link.setOnClickListener(v -> copyLink(task.url));
         link.setPadding(0, dp(3), 0, dp(3));
         dialog.addContent(link);
