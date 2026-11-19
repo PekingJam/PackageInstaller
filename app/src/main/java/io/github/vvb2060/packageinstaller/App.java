@@ -23,6 +23,7 @@ public class App extends Application {
         } catch (Throwable ignored) {
         }
         io.github.vvb2060.packageinstaller.core.Privilege.attach(this);
+        io.github.vvb2060.packageinstaller.datamodel.RequestHeaders.init(this);
 
         var previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {

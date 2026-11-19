@@ -169,6 +169,9 @@
     <string name="notify_close">关闭</string>
     <string name="default_installer_title">设为默认安装器</string>
     <string name="default_installer_desc">让 APK 文件默认用它打开</string>
+    <string name="installer_source_title">声明安装来源</string>
+    <string name="installer_source_hint">装完「应用信息 → 安装来源」显示这个包名，默认 com.android.fileexplorer</string>
+    <string name="installer_source_invalid">包名格式不正确</string>
     <string name="default_chooser_title">选择「极简安装器」并点「始终」</string>
     <string name="default_done">已设为默认安装器</string>
 
@@ -204,8 +207,14 @@
     <string name="downloads_state_interrupted">已中断</string>
     <string name="download_open">打开</string>
     <string name="download_delete">删除</string>
+    <string name="download_detail">查看详情</string>
+    <string name="download_link_copied">链接已复制</string>
+    <string name="download_detail_link">原始链接（点一下复制）</string>
+    <string name="download_redownload">重新下载</string>
     <string name="download_open_failed">没有能打开这个文件的应用</string>
     <string name="download_start">下载</string>
+    <string name="download_probing">获取中…</string>
+    <string name="download_install_after">下载完成后直接安装</string>
     <string name="download_field_size">大小：%1$s</string>
     <string name="download_field_type">类型：%1$s</string>
     <string name="download_field_host">来源：%1$s</string>

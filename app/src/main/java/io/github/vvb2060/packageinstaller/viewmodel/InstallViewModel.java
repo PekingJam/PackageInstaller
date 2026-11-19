@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.os.ParcelFileDescriptor;
+import android.util.Base64;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -189,6 +190,12 @@ public class InstallViewModel extends AndroidViewModel {
 
     /** 从外部 Intent 里抠出 http(s) 链接；没有就返回 null。 */
     private static String extractUrl(Intent intent) {
+        // linkbridge 的 pium:// 转交：真实链接在 url extra 里（URL-safe base64）
+        var packed = intent.getStringExtra("url");
+        if (packed != null && !packed.isEmpty()) {
+            var decoded = unpackUrl(packed);
+            if (decoded != null) return decoded;
+        }
         var uri = intent.getData();
         if (uri != null) {
             var scheme = uri.getScheme();
@@ -196,6 +203,19 @@ public class InstallViewModel extends AndroidViewModel {
         }
         // 分享过来的往往是「标题 + 链接」甚至一段话，取里面第一段链接
         return Urls.first(intent.getStringExtra(Intent.EXTRA_TEXT));
+    }
+
+    /** 解开 pium:// 携带的链接；不是 base64 时按明文处理。 */
+    private static String unpackUrl(String value) {
+        try {
+            var builder = new StringBuilder(value.replace('-', '+').replace('_', '/'));
+            while (builder.length() % 4 != 0) builder.append('=');
+            var text = new String(Base64.decode(builder.toString(), Base64.DEFAULT),
+                java.nio.charset.StandardCharsets.UTF_8);
+            if (Urls.isHttp(text)) return text;
+        } catch (RuntimeException ignored) {
+        }
+        return Urls.isHttp(value) ? value : null;
     }
 
     private static DownloadProbe probeQuietly(String url) {

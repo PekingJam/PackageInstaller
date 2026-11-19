@@ -12,6 +12,7 @@ import android.text.Selection;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.method.LinkMovementMethod;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.LeadingMarginSpan;
 import android.text.style.StyleSpan;
 import android.view.MotionEvent;
@@ -64,6 +65,8 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
             mCheckBox.setText(R.string.set_installer);
             mCheckBox.setTextSize(13);
             mCheckBox.setButtonTintList(ColorStateList.valueOf(context.getColor(R.color.ui_primary)));
+            // 默认勾上：让「应用信息 → 安装来源」始终显示设置里声明的那个包名
+            mCheckBox.setChecked(true);
             card.addContent(mCheckBox);
         }
 
@@ -306,9 +309,34 @@ public final class InstallConfirmationFragment extends BaseDialogFragment {
         }
 
         sb.append("\n");
+        var questionStart = sb.length();
         sb.append(string, new StyleSpan(Typeface.ITALIC),
             SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
+        var color = questionColor(textView);
+        if (color != 0) {
+            sb.setSpan(new ForegroundColorSpan(color), questionStart, sb.length(),
+                SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
         return removeSplit;
+    }
+
+    /**
+     * 提问那行跟着版本比较上色，和上面版本行同一套语义：
+     * 升级绿、版本相同黄、降级红；签名不同一律红（这比版本更值得警惕）。全新安装不着色。
+     */
+    private int questionColor(TextView textView) {
+        var context = textView.getContext();
+        var isSame = mDialogData.apkLite.isSame;
+        if (isSame != null && !isSame[1]) {
+            return context.getColor(R.color.ui_error);
+        }
+        var old = mDialogData.oldApk;
+        if (old == null || mDialogData.apkLite.isSplit()) return 0;
+        var oldVer = old.getLongVersionCode();
+        var nowVer = mDialogData.apkLite.versionCode;
+        if (oldVer < nowVer) return context.getColor(R.color.ui_ok);
+        if (oldVer > nowVer) return context.getColor(R.color.ui_error);
+        return context.getColor(R.color.ui_warn);
     }
 
     private static String formatBytes(long bytes) {

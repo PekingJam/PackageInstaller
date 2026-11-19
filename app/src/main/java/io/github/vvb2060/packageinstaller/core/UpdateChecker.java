@@ -9,6 +9,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 import io.github.vvb2060.packageinstaller.BuildConfig;
+import io.github.vvb2060.packageinstaller.datamodel.UserAgent;
 
 /**
  * 检查更新：读直链站上的 pium-latest.json（publish.sh 发布时自动写入）。
@@ -42,6 +43,7 @@ public final class UpdateChecker {
         connection.setReadTimeout(10_000);
         connection.setInstanceFollowRedirects(true);
         connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("User-Agent", UserAgent.CHROME_ANDROID);
         try {
             var code = connection.getResponseCode();
             if (code != HttpURLConnection.HTTP_OK) {

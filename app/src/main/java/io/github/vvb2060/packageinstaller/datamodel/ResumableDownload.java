@@ -114,8 +114,7 @@ public final class ResumableDownload {
         connection.setReadTimeout(30_000);
         connection.setInstanceFollowRedirects(true);
         connection.setRequestProperty("Accept-Encoding", "identity");
-        connection.setRequestProperty("User-Agent",
-            "Mozilla/5.0 (Linux; Android) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36");
+        RequestHeaders.forUrl(url).apply(connection);
         if (existing > 0) {
             connection.setRequestProperty("Range", "bytes=" + existing + "-");
         }

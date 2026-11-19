@@ -16,6 +16,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import io.github.vvb2060.packageinstaller.BuildConfig;
 import io.github.vvb2060.packageinstaller.R;
+import io.github.vvb2060.packageinstaller.datamodel.RequestHeaders;
 import io.github.vvb2060.packageinstaller.installmodel.DownloadConfirm;
 import io.github.vvb2060.packageinstaller.installmodel.InstallAborted;
 import io.github.vvb2060.packageinstaller.installmodel.InstallFailed;
@@ -67,6 +68,9 @@ public class InstallLaunch extends FragmentActivity {
         });
 
         super.onCreate(savedInstanceState);
+
+        // linkbridge 转交过来的 Referer/Cookie/UA：按 URL 登记，后续探测和下载自动带上
+        RequestHeaders.fromIntent(getIntent());
 
         if (getIntent().getBooleanExtra(EXTRA_SET_DEFAULT, false)) {
             android.widget.Toast.makeText(this, R.string.default_done,

@@ -1,6 +1,7 @@
 package io.github.vvb2060.packageinstaller.ui;
 
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.os.Bundle;
@@ -20,10 +21,13 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.FragmentActivity;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -47,6 +51,7 @@ public class DownloadsActivity extends FragmentActivity {
     private EditText input;
     private CardDialog confirmDialog;
     private boolean probing;
+    private TextView addButton;
 
     private ScrollView scroll;
     private final Map<String, View> rowsById = new HashMap<>();
@@ -74,7 +79,8 @@ public class DownloadsActivity extends FragmentActivity {
         findViewById(R.id.btn_back).setOnClickListener(v -> finish());
         scroll = findViewById(R.id.download_scroll);
         input = findViewById(R.id.download_input);
-        findViewById(R.id.download_add).setOnClickListener(v -> submit());
+        addButton = findViewById(R.id.download_add);
+        addButton.setOnClickListener(v -> submit());
         input.setOnEditorActionListener((v, actionId, event) -> {
             submit();
             return true;
@@ -124,8 +130,16 @@ public class DownloadsActivity extends FragmentActivity {
             toast(R.string.error_parse);
             return;
         }
+        probeAndConfirm(url);
+    }
+
+    /** 探测链接 → 弹确认框；安装包直接交回安装流程。任务卡片的「重新下载」也走这里。 */
+    private void probeAndConfirm(String url) {
         if (probing) return;
         probing = true;
+        // 探测最长要几十秒（禁 HEAD 的站会退到 Range GET），按钮不给反馈的话
+        // 用户会以为没点上，一直重复点
+        setBusy(true);
         var imm = getSystemService(InputMethodManager.class);
         if (imm != null) imm.hideSoftInputFromWindow(input.getWindowToken(), 0);
 
@@ -142,18 +156,17 @@ public class DownloadsActivity extends FragmentActivity {
             main.post(() -> {
                 if (isDestroyed()) return;
                 probing = false;
-                if (result.clearlyApk()) {
-                    // 安装包交回原有的安装流程（预览 + 确认安装）
-                    startActivity(new Intent(this, InstallLaunch.class)
-                        .setAction(Intent.ACTION_SEND)
-                        .setType("text/plain")
-                        .putExtra(Intent.EXTRA_TEXT, target));
-                    input.setText("");
-                    return;
-                }
+                setBusy(false);
                 showConfirm(result);
             });
         });
+    }
+
+    /** 探测期间把「下载」按钮改成「获取中…」并禁用，不然用户以为没点上。 */
+    private void setBusy(boolean busy) {
+        if (addButton == null) return;
+        addButton.setEnabled(!busy);
+        addButton.setText(busy ? R.string.download_probing : R.string.download_start);
     }
 
     private void showConfirm(DownloadProbe probe) {
@@ -162,16 +175,24 @@ public class DownloadsActivity extends FragmentActivity {
         confirmDialog = dialog;
         dialog.icon(R.drawable.ic_download)
             .title(probe.name);
+        var dest = probe.clearlyApk()
+            ? getString(R.string.download_install_after)
+            : getString(R.string.download_field_path, DownloadStore.displayPath(probe.name));
         dialog.message(getString(R.string.download_field_size, Format.size(probe.size)) + "\n"
             + getString(R.string.download_field_type, typeLabel(probe.mime)) + "\n"
             + (probe.host().isEmpty() ? ""
                 : getString(R.string.download_field_host, probe.host()) + "\n")
-            + getString(R.string.download_field_path, DownloadStore.displayPath(probe.name)));
+            + dest);
         dialog.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> dialog.dismiss());
         dialog.button(getString(R.string.download_start), R.style.Button_Pill, v -> {
             dialog.dismiss();
-            DownloadService.start(this, probe.url, probe.name, probe.mime, probe.size);
+            if (probe.clearlyApk()) {
+                // 安装包也进下载队列：先下载，下完直接进安装流程，任务照常留在列表里
+                InstallService.resume(this, probe.url, probe.name);
+            } else {
+                DownloadService.start(this, probe.url, probe.name, probe.mime, probe.size);
+            }
             input.setText("");
             toast(R.string.download_started);
             main.postDelayed(this::reload, 600);
@@ -365,35 +386,10 @@ public class DownloadsActivity extends FragmentActivity {
         applyProgress((android.widget.ProgressBar) row.findViewById(R.id.download_progress), task);
         rowsById.put(task.id, row);
 
-        var primary = (TextView) row.findViewById(R.id.download_primary);
-        var deleteButton = (TextView) row.findViewById(R.id.download_delete);
-        var now = System.currentTimeMillis();
-        if (bucket(task, now) == BUCKET_ACTIVE) {
-            // 正在下载：不给「继续」「删除」，避免重复启动服务或删掉正在写的 .part
-            primary.setText(R.string.notify_cancel);
-            primary.setOnClickListener(v -> {
-                if (task.isInstall()) {
-                    InstallService.requestCancel();
-                } else {
-                    DownloadService.requestCancel();
-                }
-                toast(R.string.notify_cancelled);
-            });
-            deleteButton.setVisibility(View.GONE);
-        } else if (DownloadTask.STATE_DONE.equals(task.state)) {
-            if (task.isInstall()) {
-                // 安装包下完就装掉了，临时文件已删，没有可以「打开」的东西
-                primary.setVisibility(View.GONE);
-            } else {
-                primary.setText(R.string.download_open);
-                primary.setOnClickListener(v -> openFile(task));
-            }
-            deleteButton.setOnClickListener(v -> confirmDelete(task));
-        } else {
-            primary.setText(R.string.resume_action);
-            primary.setOnClickListener(v -> resume(task));
-            deleteButton.setOnClickListener(v -> confirmDelete(task));
-        }
+        // 一律两个按钮：查看详情 + 删除。打开 / 继续 / 取消下载都在详情里
+        row.findViewById(R.id.download_detail).setOnClickListener(v -> showDetail(task));
+        row.findViewById(R.id.download_delete).setOnClickListener(v -> confirmDelete(task));
+        row.setOnClickListener(v -> showDetail(task));
         container.addView(row);
     }
 
@@ -417,6 +413,16 @@ public class DownloadsActivity extends FragmentActivity {
         } else {
             progress.setIndeterminate(state == BUCKET_ACTIVE);
             progress.setProgress(0);
+        }
+    }
+
+    /** 删正在下载的任务前先让服务停下，免得它继续往已删的 .part 里写。 */
+    private void cancelIfActive(DownloadTask task) {
+        if (bucket(task, System.currentTimeMillis()) != BUCKET_ACTIVE) return;
+        if (task.isInstall()) {
+            InstallService.requestCancel();
+        } else {
+            DownloadService.requestCancel();
         }
     }
 
@@ -454,6 +460,7 @@ public class DownloadsActivity extends FragmentActivity {
     }
 
     private void deleteRecord(DownloadTask task) {
+        cancelIfActive(task);
         executor.execute(() -> {
             if (!DownloadTask.STATE_DONE.equals(task.state)) {
                 ResumableDownload.delete(this, task.url);
@@ -464,6 +471,7 @@ public class DownloadsActivity extends FragmentActivity {
     }
 
     private void deleteWithFile(DownloadTask task, boolean done) {
+        cancelIfActive(task);
         executor.execute(() -> {
             if (done) {
                 if (task.target != null) {
@@ -520,15 +528,16 @@ public class DownloadsActivity extends FragmentActivity {
         ((TextView) row.findViewById(R.id.download_name)).setText(item.label);
         ((TextView) row.findViewById(R.id.download_meta)).setText(
             getString(R.string.resume_downloaded, Format.size(item.downloaded)));
-        ((TextView) row.findViewById(R.id.download_primary)).setText(R.string.resume_action);
-        row.findViewById(R.id.download_primary).setOnClickListener(v -> {
-            InstallService.resume(this, item.url, item.label);
-            toast(R.string.resume_started);
-        });
+        // 孤儿记录（有 .part 没任务行）也走详情：临时造一条任务数据
+        var task = new DownloadTask(DownloadTask.idOf(item.url), item.url, item.label,
+            DownloadProbe.mimeFromName(item.label), DownloadTask.STATE_FAILED);
+        task.downloaded = item.downloaded;
+        row.findViewById(R.id.download_detail).setOnClickListener(v -> showDetail(task));
         row.findViewById(R.id.download_delete).setOnClickListener(v -> executor.execute(() -> {
             ResumableDownload.delete(this, item.url);
             main.post(this::reload);
         }));
+        row.setOnClickListener(v -> showDetail(task));
         container.addView(row);
     }
 
@@ -542,8 +551,105 @@ public class DownloadsActivity extends FragmentActivity {
         toast(R.string.resume_started);
     }
 
+    /**
+     * 点任务卡片看详情：状态、保存位置、原始链接（可长按复制），底部「重新下载」和「打开」。
+     * 安装包下载完临时文件就删了，所以这类没有「打开」，只能重新下载（会重新走安装流程）。
+     */
+    private void showDetail(DownloadTask task) {
+        var dialog = CardDialog.create(this);
+        dialog.icon(R.drawable.ic_download).title(task.name);
+
+        var info = new StringBuilder(metaOf(task));
+        if (task.target != null && !task.target.isEmpty()) {
+            info.append('\n').append(getString(R.string.download_field_path,
+                DownloadStore.displayPath(task.name)));
+        }
+        if (task.updatedAt > 0) {
+            info.append('\n').append(new SimpleDateFormat("yyyy-MM-dd HH:mm",
+                Locale.getDefault()).format(new Date(task.updatedAt)));
+        }
+        dialog.message(info.toString());
+
+        var label = new TextView(this);
+        label.setText(R.string.download_detail_link);
+        label.setTextSize(11.5f);
+        label.setTextColor(getColor(R.color.ui_on_surface_variant));
+        dialog.addContent(label);
+
+        var link = new TextView(this);
+        link.setText(task.url);
+        link.setTextSize(11.5f);
+        link.setTextColor(getColor(R.color.ui_primary));
+        link.setTextIsSelectable(true);
+        link.setOnClickListener(v -> copyLink(task.url));
+        link.setPadding(0, dp(3), 0, dp(3));
+        dialog.addContent(link);
+
+        var done = DownloadTask.STATE_DONE.equals(task.state);
+        var active = bucket(task, System.currentTimeMillis()) == BUCKET_ACTIVE;
+
+        dialog.button(getString(R.string.notify_close), R.style.Button_Pill_Outline,
+            v -> dialog.dismiss());
+        if (active) {
+            dialog.button(getString(R.string.notify_cancel), R.style.Button_Pill_Danger, v -> {
+                dialog.dismiss();
+                if (task.isInstall()) {
+                    InstallService.requestCancel();
+                } else {
+                    DownloadService.requestCancel();
+                }
+                toast(R.string.notify_cancelled);
+            });
+        } else {
+            dialog.button(getString(R.string.download_redownload), R.style.Button_Pill_Tonal,
+                v -> {
+                    dialog.dismiss();
+                    redownload(task);
+                });
+            if (done) {
+                if (!task.isInstall() && task.target != null) {
+                    dialog.button(getString(R.string.download_open), R.style.Button_Pill, v -> {
+                        dialog.dismiss();
+                        openFile(task);
+                    });
+                }
+            } else {
+                dialog.button(getString(R.string.resume_action), R.style.Button_Pill, v -> {
+                    dialog.dismiss();
+                    resume(task);
+                });
+            }
+        }
+        dialog.show();
+    }
+
+    /** 点链接直接复制到剪贴板，比长按选词再点复制快。 */
+    private void copyLink(String url) {
+        var clipboard = getSystemService(ClipboardManager.class);
+        if (clipboard == null) return;
+        clipboard.setPrimaryClip(ClipData.newPlainText("url", url));
+        toast(R.string.download_link_copied);
+    }
+
+    /** 重新下载：清掉旧记录和残留的 .part，再走一遍探测 + 确认。 */
+    private void redownload(DownloadTask task) {
+        var url = task.url;
+        var id = task.id;
+        executor.execute(() -> {
+            ResumableDownload.delete(this, url);
+            DownloadTask.remove(this, id);
+            main.post(() -> {
+                reload();
+                probeAndConfirm(url);
+            });
+        });
+    }
+
     private void openFile(DownloadTask task) {
-        var intent = DownloadStore.openIntent(this, task.target, task.mime);
+        // 服务器给的 mime 经常是 octet-stream，APK 要按安装包类型打开，否则系统找不到安装器
+        var mime = task.looksLikeApk()
+            ? "application/vnd.android.package-archive" : task.mime;
+        var intent = DownloadStore.openIntent(this, task.target, mime);
         if (intent == null) {
             toast(R.string.download_open_failed);
             return;

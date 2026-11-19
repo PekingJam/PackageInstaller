@@ -133,8 +133,7 @@ public final class DownloadProbe {
         connection.setInstanceFollowRedirects(true);
         connection.setRequestMethod(method);
         connection.setRequestProperty("Accept-Encoding", "identity");
-        connection.setRequestProperty("User-Agent",
-            "Mozilla/5.0 (Linux; Android) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36");
+        RequestHeaders.forUrl(url).apply(connection);
         if (range != null) connection.setRequestProperty("Range", range);
         return connection;
     }

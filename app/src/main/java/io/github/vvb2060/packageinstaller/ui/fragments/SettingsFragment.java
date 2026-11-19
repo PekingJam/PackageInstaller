@@ -5,7 +5,11 @@ import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import io.github.vvb2060.packageinstaller.R;
@@ -45,9 +49,40 @@ public final class SettingsFragment extends BaseDialogFragment {
         defaultBox.setChecked(Privilege.isDefaultInstaller());
         card.addContent(defaultBox);
 
+        // 声明安装来源：装完之后「应用信息 → 安装来源」显示的就是这个包名
+        var density = context.getResources().getDisplayMetrics().density;
+        var sourceTitle = new TextView(context);
+        sourceTitle.setText(R.string.installer_source_title);
+        sourceTitle.setTextSize(13);
+        sourceTitle.setPadding(0, Math.round(14 * density), 0, Math.round(2 * density));
+        card.addContent(sourceTitle);
+
+        var sourceHint = new TextView(context);
+        sourceHint.setText(R.string.installer_source_hint);
+        sourceHint.setTextSize(11);
+        sourceHint.setTextColor(context.getColor(R.color.ui_on_surface_variant));
+        card.addContent(sourceHint);
+
+        var sourceInput = new EditText(context);
+        sourceInput.setText(Privilege.installerSource());
+        sourceInput.setHint(Privilege.DEFAULT_INSTALLER_SOURCE);
+        sourceInput.setSingleLine(true);
+        sourceInput.setTextSize(13);
+        sourceInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        sourceInput.setLayoutParams(new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        card.addContent(sourceInput);
+
         card.button(getString(android.R.string.cancel), R.style.Button_Pill_Outline,
             v -> finishOrDismiss());
         card.button(getString(android.R.string.ok), R.style.Button_Pill, v -> {
+            var source = sourceInput.getText().toString().trim();
+            if (source.isEmpty()) source = Privilege.DEFAULT_INSTALLER_SOURCE;
+            if (!Privilege.isValidPackageName(source)) {
+                Toast.makeText(context, R.string.installer_source_invalid, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Privilege.setInstallerSource(source);
             if (safeModeBox.isChecked() != mDialogData.safeMode) {
                 mViewModel.setSafeMode(safeModeBox.isChecked());
             }

@@ -186,13 +186,37 @@ public final class Privilege {
     }
 
     public static String installerPackageName() {
-        try {
-            appContext.getPackageManager()
-                .getPackageInfo("com.android.vending", PackageManager.MATCH_SYSTEM_ONLY);
-            return "com.android.vending";
-        } catch (PackageManager.NameNotFoundException ignored) {
-            return "com.android.shell";
-        }
+        return installerSource();
+    }
+
+    /** 声明安装来源的默认值：冒充系统文件管理器。 */
+    public static final String DEFAULT_INSTALLER_SOURCE = "com.android.fileexplorer";
+    private static final String PREF_INSTALLER_SOURCE = "installer_source";
+    private static final Pattern PACKAGE_NAME =
+        Pattern.compile("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+");
+
+    public static boolean isValidPackageName(String name) {
+        return name != null && PACKAGE_NAME.matcher(name).matches();
+    }
+
+    /** 设置里填的安装来源包名；没设置或填空时回落到默认值。 */
+    public static String installerSource() {
+        var context = appContext;
+        if (context == null) return DEFAULT_INSTALLER_SOURCE;
+        var value = context.getSharedPreferences(BuildConfig.APPLICATION_ID, Context.MODE_PRIVATE)
+            .getString(PREF_INSTALLER_SOURCE, null);
+        if (value == null) return DEFAULT_INSTALLER_SOURCE;
+        value = value.trim();
+        return value.isEmpty() ? DEFAULT_INSTALLER_SOURCE : value;
+    }
+
+    public static void setInstallerSource(String source) {
+        var context = appContext;
+        if (context == null) return;
+        var value = source == null ? "" : source.trim();
+        if (value.isEmpty()) value = DEFAULT_INSTALLER_SOURCE;
+        context.getSharedPreferences(BuildConfig.APPLICATION_ID, Context.MODE_PRIVATE)
+            .edit().putString(PREF_INSTALLER_SOURCE, value).apply();
     }
 
     public static PackageInfo getPackageInfo(String packageName, int flags)

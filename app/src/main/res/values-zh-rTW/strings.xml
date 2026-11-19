@@ -68,6 +68,9 @@
     <string name="error_cancelled">已取消安裝。</string>
 
     <string name="settings_safe_mode">安全模式會停用部分危險功能，僅在必要時啟用</string>
+    <string name="installer_source_title">宣告安裝來源</string>
+    <string name="installer_source_hint">安裝後「應用程式資訊 → 安裝來源」顯示這個套件名稱，預設 com.android.fileexplorer</string>
+    <string name="installer_source_invalid">套件名稱格式不正確</string>
     <string name="download_with">用極簡安裝器下載</string>
     <string name="action_download">新建下載</string>
     <string name="action_download_desc">輸入連結，安裝包直接裝、其他存 Download</string>
@@ -87,8 +90,14 @@
     <string name="downloads_state_interrupted">已中斷</string>
     <string name="download_open">開啟</string>
     <string name="download_delete">刪除</string>
+    <string name="download_detail">查看詳情</string>
+    <string name="download_link_copied">連結已複製</string>
+    <string name="download_detail_link">原始連結（點一下複製）</string>
+    <string name="download_redownload">重新下載</string>
     <string name="download_open_failed">沒有能開啟這個檔案的應用</string>
     <string name="download_start">下載</string>
+    <string name="download_probing">取得中…</string>
+    <string name="download_install_after">下載完成後直接安裝</string>
     <string name="download_field_size">大小：%1$s</string>
     <string name="download_field_type">類型：%1$s</string>
     <string name="download_field_host">來源：%1$s</string>

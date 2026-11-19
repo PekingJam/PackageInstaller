@@ -89,6 +89,8 @@ public class DownloadEngine extends Thread implements Closeable {
     private final Selector selector;
 
     private URI uri;
+    /** 原始 URL，用来取 linkbridge 转交过来的请求头（重定向后 uri 会变）。 */
+    private String headersUrl;
     private IpPool ipPool;
 
     private int concurrent = 1;
@@ -113,6 +115,7 @@ public class DownloadEngine extends Thread implements Closeable {
             uri = URI.create("https://" + uri);
         }
         this.uri = uri;
+        this.headersUrl = uri.toString();
         this.ipPool = new IpPool(uri.getHost());
 
         var task = new Task(-1, buffer);
@@ -502,11 +505,15 @@ public class DownloadEngine extends Thread implements Closeable {
                 start = "0";
                 end = 0;
             }
-            String request = "GET " + getTarget() + " HTTP/1.1\r\n" +
-                "Host: " + uri.getHost() + "\r\n" +
-                "Range: bytes=" + start + "-" + end + "\r\n" +
-                "User-Agent: PackageInstaller\r\n" +
-                "Accept: */*\r\n\r\n";
+            var builder = new StringBuilder(320);
+            builder.append("GET ").append(getTarget()).append(" HTTP/1.1\r\n")
+                .append("Host: ").append(uri.getHost()).append("\r\n")
+                .append("Range: bytes=").append(start).append('-').append(end).append("\r\n");
+            for (var line : RequestHeaders.forUrl(headersUrl).headerLines()) {
+                builder.append(line).append("\r\n");
+            }
+            builder.append("Accept: */*\r\n\r\n");
+            String request = builder.toString();
 
             myAppData.clear();
             myAppData.put(request.getBytes(StandardCharsets.UTF_8));

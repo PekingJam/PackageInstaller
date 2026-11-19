@@ -169,6 +169,9 @@
     <string name="notify_close">Dismiss</string>
     <string name="default_installer_title">Set as default installer</string>
     <string name="default_installer_desc">Open APK files with this app by default</string>
+    <string name="installer_source_title">Declared install source</string>
+    <string name="installer_source_hint">Package name reported as the installer (App info → Installed from); default com.android.fileexplorer</string>
+    <string name="installer_source_invalid">Invalid package name</string>
     <string name="default_chooser_title">Pick this app, then choose Always</string>
     <string name="default_done">Default installer set</string>
 
@@ -204,8 +207,14 @@
     <string name="downloads_state_interrupted">Interrupted</string>
     <string name="download_open">Open</string>
     <string name="download_delete">Delete</string>
+    <string name="download_detail">View details</string>
+    <string name="download_link_copied">Link copied</string>
+    <string name="download_detail_link">Original link (tap to copy)</string>
+    <string name="download_redownload">Re-download</string>
     <string name="download_open_failed">No app can open this file</string>
     <string name="download_start">Download</string>
+    <string name="download_probing">Checking…</string>
+    <string name="download_install_after">Installs right after download</string>
     <string name="download_field_size">Size: %1$s</string>
     <string name="download_field_type">Type: %1$s</string>
     <string name="download_field_host">From: %1$s</string>
