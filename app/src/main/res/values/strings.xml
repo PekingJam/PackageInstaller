@@ -203,6 +203,8 @@
     <string name="downloads_state_done">Saved to Download</string>
     <string name="downloads_state_failed">Failed</string>
     <string name="downloads_state_installed">Installed</string>
+    <string name="downloads_state_installed_nofile">Installed · file deleted</string>
+    <string name="downloads_state_file_deleted">File deleted</string>
     <string name="downloads_state_installing">Installing</string>
     <string name="downloads_state_install_failed">Install failed</string>
     <string name="downloads_state_interrupted">Interrupted</string>

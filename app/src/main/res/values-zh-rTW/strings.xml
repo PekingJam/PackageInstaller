@@ -86,6 +86,8 @@
     <string name="downloads_state_done">已儲存到 Download</string>
     <string name="downloads_state_failed">下載失敗</string>
     <string name="downloads_state_installed">已安裝</string>
+    <string name="downloads_state_installed_nofile">已安裝 · 檔案已刪除</string>
+    <string name="downloads_state_file_deleted">檔案已刪除</string>
     <string name="downloads_state_installing">正在安裝</string>
     <string name="downloads_state_install_failed">安裝失敗</string>
     <string name="downloads_state_interrupted">已中斷</string>

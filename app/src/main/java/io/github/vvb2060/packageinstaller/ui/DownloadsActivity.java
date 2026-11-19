@@ -63,6 +63,7 @@ public class DownloadsActivity extends FragmentActivity {
     private ScrollView scroll;
     private final Map<String, View> rowsById = new HashMap<>();
     private final Map<String, Drawable> iconCache = new HashMap<>();
+    private final Map<String, Boolean> existsCache = new HashMap<>();
     private final Set<String> iconTried = new HashSet<>();
     private String lastSignature = "";
     private boolean loading;
@@ -312,6 +313,7 @@ public class DownloadsActivity extends FragmentActivity {
         }
         lastSignature = signature;
         rowsById.clear();
+        existsCache.clear();
         var scrollY = scroll == null ? 0 : scroll.getScrollY();
         container.removeAllViews();
         var now = System.currentTimeMillis();
@@ -410,10 +412,31 @@ public class DownloadsActivity extends FragmentActivity {
         container.addView(row);
     }
 
+    /** 文件还在不在：安装包类下完就删了，普通下载要按 URI 探一下。结果按任务缓存。 */
+    private boolean fileAvailable(DownloadTask task) {
+        var cached = existsCache.get(task.id);
+        if (cached != null) return cached;
+        boolean exists;
+        if (task.isInstall() || task.target == null || task.target.isEmpty()) {
+            exists = false;
+        } else {
+            try (var pfd = getContentResolver().openFileDescriptor(Uri.parse(task.target), "r")) {
+                exists = pfd != null;
+            } catch (Exception e) {
+                exists = false;
+            }
+        }
+        existsCache.put(task.id, exists);
+        return exists;
+    }
+
     /** 按文件类型给图标；拿不到类型就退回通用文件图标。 */
     private void applyIcon(View row, DownloadTask task) {
         var icon = (ImageView) row.findViewById(R.id.download_icon);
         if (icon == null) return;
+        // 文件已经不在的，图标调淡，一眼能看出来
+        icon.setAlpha(DownloadTask.STATE_DONE.equals(task.state) && !fileAvailable(task)
+            ? 0.35f : 1f);
         var cached = iconCache.get(task.id);
         if (cached != null) {
             icon.setImageDrawable(cached);
@@ -602,8 +625,14 @@ public class DownloadsActivity extends FragmentActivity {
         var meta = new StringBuilder();
         var install = task.isInstall();
         if (DownloadTask.STATE_DONE.equals(task.state)) {
-            meta.append(getString(install ? R.string.downloads_state_installed
-                : R.string.downloads_state_done));
+            if (install) {
+                // 安装包下完就删了，直接说明白，别让人以为还能点开
+                meta.append(getString(R.string.downloads_state_installed_nofile));
+            } else if (fileAvailable(task)) {
+                meta.append(getString(R.string.downloads_state_done));
+            } else {
+                meta.append(getString(R.string.downloads_state_file_deleted));
+            }
             if (task.size > 0) meta.append(" · ").append(Format.size(task.size));
         } else if (DownloadTask.STATE_PAUSED.equals(task.state)) {
             meta.append(getString(R.string.downloads_state_paused));

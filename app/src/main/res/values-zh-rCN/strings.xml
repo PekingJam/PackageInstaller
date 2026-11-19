@@ -203,6 +203,8 @@
     <string name="downloads_state_done">已保存到 Download</string>
     <string name="downloads_state_failed">下载失败</string>
     <string name="downloads_state_installed">已安装</string>
+    <string name="downloads_state_installed_nofile">已安装 · 文件已删除</string>
+    <string name="downloads_state_file_deleted">文件已删除</string>
     <string name="downloads_state_installing">正在安装</string>
     <string name="downloads_state_install_failed">安装失败</string>
     <string name="downloads_state_interrupted">已中断</string>
